@@ -312,3 +312,4 @@ void sim_set_long_track(void)
     snprintf(s_media.artist, sizeof s_media.artist, "C. Tangana, Kiko Veneno");
     s_media.version++;
 }
+

@@ -39,7 +39,7 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Tiempo | Pronóstico de [Open-Meteo](https://open-meteo.com) por Wi-Fi, sin cuenta ni clave; ubicación aproximada por IP con [ipwho.is](https://ipwho.is) |
 | Alarmas | Hasta 8, con días de la semana; posponer 9 min; suenan también con la pantalla apagada |
 | Sonido | Altavoz ES8311: sonidos sintetizados (clic, aviso, cargador, alarma, temporizador, llamada) y volumen |
-| Gestos de muñeca | Doble toque (detector de toques por hardware del QMI8658), giro rápido de muñeca y levantar la muñeca para encender la pantalla |
+| Gestos de muñeca | Doble toque (golpes detectados con el acelerómetro a 500 Hz, calibrados con toques reales), giro rápido de muñeca y levantar la muñeca para encender la pantalla |
 | iPhone | Notificaciones con acciones (ANCS), llamadas entrantes (aceptar/rechazar), control de música y volumen (AMS), hora del teléfono (CTS) |
 | Música | Página *Reproduciendo* bajo el Centro de control. Portada descargada por Wi-Fi (se puede desactivar en *Ajustes › Música*); sin portada, el texto ocupa todo el ancho. Títulos largos en una línea que se desplaza |
 | Sistema | Centro de control, Smart Stack, pantalla siempre activa (anti-quemado), animación de carga, levantar la muñeca para activar |
@@ -53,7 +53,7 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Esfera | ↑ desde abajo | Smart Stack (↓ para cerrarlo) |
 | Esfera | ↓ desde arriba | Notificaciones |
 | Esfera | ← → | Cambiar de esfera |
-| Esfera | mantener pulsado | Elegir esfera |
+| Esfera | mantener pulsado | Apps (como el botón BOOT); las esferas se eligen en la app Esferas |
 | Apps y submenús | → | Atrás |
 | Notificaciones | ↑ desde el borde inferior o → | Volver a la esfera (desplazar la lista nunca la cierra) |
 | Botón **BOOT** | pulsar | Esfera ↔ apps (doble pulsación: última app) |
@@ -61,6 +61,12 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Muñeca | doble toque en el borde o en una zona sin botones | Contestar llamada, posponer alarma, detener temporizador, abrir aviso o pausar la música |
 | Muñeca | levantarla para mirar | Encender la pantalla |
 | Muñeca | giro rápido hacia fuera y vuelta | Descartar aviso, silenciar llamada, volver a la esfera |
+
+## Límites del hardware
+
+- La pantalla táctil (FT3168) reporta **un solo dedo**: no hay pellizco ni gestos de dos dedos.
+- El detector de toques integrado del QMI8658 no reportó eventos en esta placa, así que el doble toque se detecta por software.
+- No hay motor de vibración: las alarmas y las llamadas suenan por el altavoz.
 
 ## Hardware
 
@@ -140,5 +146,4 @@ El BSP oficial usa QSPI a 40 MHz y un único buffer de 20 líneas en PSRAM. avoc
 - **Fuentes:** Inter, Nunito y Noto Emoji, con licencia SIL OFL 1.1 (ver `assets/fonts/OFL-*.txt`).
 - **Símbolos:** FontAwesome 5 Free, incluidos con LVGL.
 - **Dependencias:** LVGL (MIT); esp_lvgl_port, esp_lcd_sh8601, esp_jpeg y esp_codec_dev (Apache 2.0).
-- La configuración del detector de toques del QMI8658 sigue la de [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT).
 - La marca de aguacate la dibuja `tools/gen_assets.py`.

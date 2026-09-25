@@ -73,6 +73,8 @@ void avo_nav_push(void (*build)(lv_obj_t *screen), void (*leave)(void));
 /* ---------------------------------------------------------------- gestures */
 /* Wraps the pointer read callback with the swipe recognizer. */
 void avo_gesture_install(void);
+/* True if the last touch (< 1 s ago) landed on a button or other control. */
+bool avo_gesture_recent_control_press(void);
 /* Ajustes > Gestos test area: called on every double tap / flick. */
 void avo_motion_set_probe(void (*probe)(bool flick));
 

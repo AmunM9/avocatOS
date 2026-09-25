@@ -1,7 +1,7 @@
 /*
- * Motion at 100 Hz from the QMI8658: step counting (always), double tap
- * (the IMU's hardware tap engine, software fallback) and wrist flick (only
- * while the screen is on), and wrist raise (while it sleeps). Runs inside the
+ * Motion at 100 Hz from the QMI8658: step counting (always), double tap and
+ * wrist flick (only while the screen is on), and wrist raise (while it
+ * sleeps). Runs inside the
  * input task, one sample per call.
  */
 #include <math.h>
@@ -14,7 +14,6 @@
 static const char *TAG = "board_motion";
 
 #define RAISE_EVERY (AVO_MOTION_HZ / AVO_RAISE_HZ) /* raise detector at 25 Hz */
-#define TAP_POLL_EVERY 2        /* hardware tap status at 50 Hz          */
 #define ROLL_EVERY AVO_MOTION_HZ /* activity bookkeeping once per second */
 #define SAVE_EVERY_S 600        /* persist the day every 10 minutes      */
 #define LOG_EVERY_S 60          /* orientation / steps line for tuning   */
@@ -22,7 +21,7 @@ static const char *TAG = "board_motion";
  * desk work; the new counter starts a clean day. */
 #define NVS_KEY_ACTIVITY "activity2"
 
-static avo_tap_t s_tap;             /* software fallback without the tap engine */
+static avo_tap_t s_tap;
 static avo_flick_t s_flick;
 static avo_raise_t s_raise;
 static avo_steps_t s_steps;
@@ -70,21 +69,10 @@ static void raise_step(const float a[3])
 
 static void tap_step(const avo_settings_t *s, const float a[3], bool awake)
 {
-    bool want = awake && s->double_tap;
-    if (board_imu_has_tap()) {
-        if (s_n % TAP_POLL_EVERY == 0) {
-            int t = board_imu_poll_tap();
-            if (t) {
-                ESP_LOGI(TAG, "tap: %s%s", t == 2 ? "double" : "single", want ? "" : " (ignored)");
-            }
-            if (t == 2 && want) {
-                avo_ui_post_double_tap();
-            }
-        }
-        return;
-    }
-    if (want) {
+    /* footsteps also jolt the wrist: no double tap while walking */
+    if (awake && s->double_tap && !s_steps.walking) {
         if (avo_tap_feed(&s_tap, a)) {
+            ESP_LOGI(TAG, "double tap");
             avo_ui_post_double_tap();
         }
     } else {

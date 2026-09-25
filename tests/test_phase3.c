@@ -117,18 +117,33 @@ static void test_double_tap_detected(void)
     CHECK(feed_taps(at, 2, 0.9f, 2500, 0.01f) == 1);
 }
 
-static void test_single_or_triple_tap_ignored(void)
+static void test_single_tap_ignored_and_triple_fires_once(void)
 {
     const float one[] = { 1000 };
     CHECK(feed_taps(one, 1, 0.9f, 2500, 0.01f) == 0);
     const float three[] = { 1000, 1200, 1400 };
-    CHECK(feed_taps(three, 3, 0.9f, 2500, 0.01f) == 0);
+    CHECK(feed_taps(three, 3, 0.9f, 2500, 0.01f) == 1);
 }
 
-static void test_taps_too_far_apart_ignored(void)
+/* measured on the watch: knocks of 1-2.5 g about 450-500 ms apart */
+static void test_relaxed_double_tap_detected(void)
 {
-    const float far[] = { 1000, 1700 };
+    const float at[] = { 1000, 1480 };
+    CHECK(feed_taps(at, 2, 1.3f, 2500, 0.01f) == 1);
+}
+
+static void test_weak_jolts_and_far_taps_ignored(void)
+{
+    const float far[] = { 1000, 1800 };
     CHECK(feed_taps(far, 2, 0.9f, 2500, 0.01f) == 0);
+    const float weak[] = { 1000, 1250 };
+    CHECK(feed_taps(weak, 2, 0.45f, 2500, 0.01f) == 0); /* fidgeting, not a knock */
+}
+
+static void test_train_of_knocks_gives_pairs(void)
+{
+    const float five[] = { 1000, 1450, 1900, 2350, 2800 };
+    CHECK(feed_taps(five, 5, 1.2f, 4000, 0.01f) == 2);
 }
 
 static void test_taps_while_moving_ignored(void)
@@ -589,8 +604,10 @@ int main(void)
     RUN(test_sound_loops_until_stopped);
     RUN(test_sound_ends_with_silence);
     RUN(test_double_tap_detected);
-    RUN(test_single_or_triple_tap_ignored);
-    RUN(test_taps_too_far_apart_ignored);
+    RUN(test_single_tap_ignored_and_triple_fires_once);
+    RUN(test_relaxed_double_tap_detected);
+    RUN(test_weak_jolts_and_far_taps_ignored);
+    RUN(test_train_of_knocks_gives_pairs);
     RUN(test_taps_while_moving_ignored);
     RUN(test_flick_detected);
     RUN(test_turn_without_return_ignored);

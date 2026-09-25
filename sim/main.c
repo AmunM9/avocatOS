@@ -154,6 +154,20 @@ static void motion_checks(void)
     avo_ui_post_flick(); run_ms(700);
     expect("giro de muñeca vuelve a la esfera", AVO_ROUTE_FACE);
 
+    /* double tap made of touches on a button = two presses, not the gesture */
+    avo_nav_app(&AVO_APP_MUSIC); run_ms(700);
+    avo_media_t m0, m1;
+    avo_hal_media(&m0);
+    tap(205, 292);                            /* play/pause button */
+    avo_ui_post_double_tap(); run_ms(300);
+    avo_hal_media(&m1);
+    check("doble toque sobre un botón no se suma", m1.playing == !m0.playing);
+    avo_nav_face(); run_ms(1500);
+    tap(205, 250);                            /* the face: no control there */
+    avo_ui_post_double_tap(); run_ms(300);
+    avo_hal_media(&m0);
+    check("doble toque en la esfera pausa/reanuda la música", m0.playing == !m1.playing);
+
     /* an alarm one minute ahead rings, double tap snoozes it */
     avo_time_t now;
     avo_hal_time_now(&now);
@@ -177,6 +191,14 @@ static void motion_checks(void)
     check("una alarma de una vez se desactiva sola", !al->list[saved].enabled);
     al->count = saved;
     avo_alarms_commit();
+
+    avo_nav_face(); run_ms(1500);
+    finger = (typeof(finger)){ true, 205, 250 };
+    run_ms(700);                              /* touch and hold the face */
+    finger.pressed = false;
+    run_ms(600);
+    expect("mantener pulsado en la esfera abre las apps", AVO_ROUTE_GRID);
+    avo_nav_face(); run_ms(500);
 }
 
 /* ---------------------------------------------------------------- tour */

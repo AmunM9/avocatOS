@@ -6,7 +6,7 @@
  *   face  --swipe up-->     Smart Stack      --swipe down--> face
  *   face  --swipe down-->   Notifications    --swipe up-->   face
  *   face  --swipe L/R-->    next/prev face (tileview)
- *   face  --BOOT-->         app grid --tap--> app --swipe right--> back
+ *   face  --BOOT / hold-->  app grid --tap--> app --swipe right--> back
  *   PWR                     Control Center (overlay, returns to caller)
  *                           --swipe up--> Now Playing page
  * Swipes are recognized in avo_gesture.c; this file owns the transitions.
@@ -405,11 +405,14 @@ static void face_changed_cb(lv_event_t *e)
     }
 }
 
+/* Touch and hold the face: the app grid (a pinch can't be read here: the
+ * FT3168 reports one finger). Faces are picked in the Esferas app. */
 static void face_long_press_cb(lv_event_t *e)
 {
     (void)e;
     if (!avo_nav_locked() && s_route == AVO_ROUTE_FACE) {
-        avo_nav_app(&AVO_APP_FACES);
+        avo_hal_click();
+        avo_nav_grid();
     }
 }
 
@@ -488,6 +491,9 @@ static void handle_button(avo_btn_t btn, avo_press_t press)
  * open), else play/pause the music. Wrist flick: dismiss, else go home. */
 static void handle_double_tap(void)
 {
+    if (avo_gesture_recent_control_press()) {
+        return; /* two quick taps on a button: that button handled them */
+    }
     if (s_motion_probe) {
         s_motion_probe(false);
         return;

@@ -2,8 +2,8 @@
  * Motion gestures and step counting from the QMI8658 sampled at 100 Hz.
  * All times are in samples (10 ms each).
  *
- * Double tap: two sharp knocks on the case 80-450 ms apart, on a wrist that
- * was still before and stays still after (so walking or typing never fires).
+ * Double tap: two sharp knocks on the case or the glass up to 750 ms apart,
+ * starting from a still wrist.
  * Wrist flick: a fast turn away and back from a still wrist (watchOS 26).
  * Steps: peaks of the smoothed acceleration magnitude crossing a threshold
  * that follows the last second of motion, counted only while a walk
@@ -14,17 +14,19 @@
 #include <string.h>
 #include "avo_core.h"
 
-/* ---------------------------------------------------------------- double tap */
-#define TAP_HIGH 0.35f          /* g change per sample that marks a knock      */
-#define TAP_QUIET 0.10f         /* g change per sample of a still wrist        */
-#define TAP_CALM_BEFORE 20      /* 200 ms still before the first knock         */
-#define TAP_SAME 6              /* 60 ms: ringing of the same knock            */
-#define TAP_GAP_MIN 8           /* 80 ms                                       */
-#define TAP_GAP_MAX 45          /* 450 ms                                      */
-#define TAP_CALM_AFTER 25       /* 250 ms still after (rejects triple taps)    */
-#define TAP_COOLDOWN 50
+/* ---------------------------------------------------------------- double tap
+ * Tuned with knocks recorded on the watch (accelerometer at 500 Hz, no
+ * filter, read at 100 Hz): a knock on the case or the glass changes the
+ * reading by 1-2.5 g from one sample to the next and rings for ~100 ms;
+ * people double-tap 150-700 ms apart. Fidgeting stays around 0.2-0.6 g. */
+#define TAP_HIGH 0.6f           /* g change per sample that marks a knock      */
+#define TAP_QUIET 0.3f          /* g change per sample of a still wrist        */
+#define TAP_CALM_BEFORE 10      /* 100 ms still before the first knock         */
+#define TAP_SAME 12             /* 120 ms: ringing of the same knock           */
+#define TAP_GAP_MAX 75          /* 750 ms                                      */
+#define TAP_COOLDOWN 60         /* 600 ms: a third knock does not fire again   */
 
-enum { TAP_IDLE, TAP_ONE, TAP_TWO };
+enum { TAP_IDLE, TAP_ONE };
 
 static float max_abs_diff(const float a[3], const float b[3])
 {
@@ -53,35 +55,25 @@ bool avo_tap_feed(avo_tap_t *t, const float a[3])
     t->high = high;
     uint16_t calm_before = t->calm;
     t->calm = j < TAP_QUIET ? (uint16_t)(t->calm + 1) : 0;
-    if (t->n < t->cooldown_until) {
+    if (t->n < t->cooldown_until || !knock) {
+        if (t->state == TAP_ONE && t->n - t->first_at > TAP_GAP_MAX) {
+            t->state = TAP_IDLE;
+        }
         return false;
     }
-    bool new_knock = knock && t->n - t->last_peak_at > TAP_SAME;
-    switch (t->state) {
-    case TAP_IDLE:
-        if (knock && calm_before >= TAP_CALM_BEFORE) {
-            t->state = TAP_ONE;
-            t->first_at = t->last_peak_at = t->n;
-        }
-        break;
-    case TAP_ONE:
-        if (new_knock) {
-            uint32_t gap = t->n - t->first_at;
-            t->state = (gap >= TAP_GAP_MIN && gap <= TAP_GAP_MAX) ? TAP_TWO : TAP_IDLE;
-            t->last_peak_at = t->n;
-        } else if (t->n - t->first_at > TAP_GAP_MAX) {
-            t->state = TAP_IDLE;
-        }
-        break;
-    case TAP_TWO:
-        if (new_knock) {
-            t->state = TAP_IDLE; /* a third knock: not a double tap */
-        } else if (t->calm >= TAP_CALM_AFTER) {
-            t->state = TAP_IDLE;
-            t->cooldown_until = t->n + TAP_COOLDOWN;
-            return true;
-        }
-        break;
+    if (t->state == TAP_ONE && t->n - t->last_peak_at <= TAP_SAME) {
+        return false; /* ringing of the first knock */
+    }
+    if (t->state == TAP_ONE && t->n - t->first_at <= TAP_GAP_MAX) {
+        t->state = TAP_IDLE;
+        t->cooldown_until = t->n + TAP_COOLDOWN;
+        return true; /* answer on the second knock, like watchOS */
+    }
+    if (calm_before >= TAP_CALM_BEFORE) {
+        t->state = TAP_ONE;
+        t->first_at = t->last_peak_at = t->n;
+    } else {
+        t->state = TAP_IDLE;
     }
     return false;
 }
