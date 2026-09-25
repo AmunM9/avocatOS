@@ -61,7 +61,8 @@ static void render(const avo_portal_t *st)
         big_value(card, "Abre en el iPhone", st->url, &avo_font_30);
         big_value(card, "PIN", st->pin, &avo_font_digits_76);
         avo_note(tr.body, "El iPhone debe estar en la misma red Wi-Fi. Desde esa página puedes enviar una foto "
-                          "para la esfera Retrato o instalar una actualización.");
+                          "para la esfera Retrato o instalar una actualización. El portal solo existe mientras "
+                          "esta pantalla está abierta, y cada vez usa un PIN nuevo.");
         break;
     case AVO_PORTAL_RECEIVING:
         snprintf(buf, sizeof buf, "%u %%", st->percent);

@@ -152,8 +152,70 @@ static void test_settings_upgrade_to_v4(void)
     CHECK(s.artwork && !s.low_power);
 }
 
+/* ---------------- dithering ---------------- */
+
+static double mean_red8(const uint16_t *px, int n)
+{
+    double sum = 0;
+    for (int i = 0; i < n; i++) sum += ((px[i] >> 11) & 0x1F) * 255.0 / 31.0;
+    return sum / n;
+}
+
+static void test_dither_keeps_mean(void)
+{
+    enum { W = 16, H = 16 };
+    static uint8_t rgb[W * H * 3];
+    static uint16_t out[W * H];
+    for (int v = 0; v <= 255; v += 17) {
+        for (int i = 0; i < W * H; i++) { rgb[3 * i] = (uint8_t)v; rgb[3 * i + 1] = 0; rgb[3 * i + 2] = 0; }
+        avo_dither_rgb888_to_rgb565(rgb, out, W, H);
+        CHECK(fabs(mean_red8(out, W * H) - v) < 2.5); /* truncation drifts up to 8 */
+    }
+}
+
+static void test_dither_extremes_exact(void)
+{
+    uint8_t rgb[4 * 4 * 3];
+    uint16_t out[16];
+    memset(rgb, 255, sizeof rgb);
+    avo_dither_rgb888_to_rgb565(rgb, out, 4, 4);
+    for (int i = 0; i < 16; i++) CHECK(out[i] == 0xFFFF);
+    memset(rgb, 0, sizeof rgb);
+    avo_dither_rgb888_to_rgb565(rgb, out, 4, 4);
+    for (int i = 0; i < 16; i++) CHECK(out[i] == 0x0000);
+}
+
+static void test_dither_gradient_is_smooth(void)
+{
+    /* a slow horizontal ramp: column averages must rise steadily, not in
+     * 8-level stairs */
+    enum { W = 256, H = 4 };
+    static uint8_t rgb[W * H * 3];
+    static uint16_t out[W * H];
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            uint8_t v = (uint8_t)(64 + x / 4);                /* 64..127 */
+            rgb[3 * (y * W + x)] = v; rgb[3 * (y * W + x) + 1] = v; rgb[3 * (y * W + x) + 2] = v;
+        }
+    avo_dither_rgb888_to_rgb565(rgb, out, W, H);
+    int flat_runs = 0;
+    double prev = -1;
+    for (int x = 0; x < W; x += 16) {
+        uint16_t block[64];
+        int k = 0;
+        for (int y = 0; y < H; y++) for (int dx = 0; dx < 16; dx++) block[k++] = out[y * W + x + dx];
+        double m = mean_red8(block, 64);
+        if (prev >= 0 && fabs(m - prev) < 0.5) flat_runs++;
+        prev = m;
+    }
+    CHECK(flat_runs <= 2);
+}
+
 int main(void)
 {
+    RUN(test_dither_keeps_mean);
+    RUN(test_dither_extremes_exact);
+    RUN(test_dither_gradient_is_smooth);
     RUN(test_battery_estimate_linear);
     RUN(test_battery_estimate_needs_data);
     RUN(test_battery_charging_resets);

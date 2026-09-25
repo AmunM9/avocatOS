@@ -26,6 +26,8 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | ![](docs/screenshots/activity.png) | ![](docs/screenshots/weather.png) | ![](docs/screenshots/alarms.png) | ![](docs/screenshots/alarm-editor.png) |
 | **Temporizador terminado** | **Gestos** | **Sonido** | **Tiempo (Avocado)** |
 | ![](docs/screenshots/timer-done.png) | ![](docs/screenshots/settings-gestures.png) | ![](docs/screenshots/settings-sound.png) | ![](docs/screenshots/avocado-weather.png) |
+| **Órbita** | **Retrato** | **Enviar al reloj** | **Batería** |
+| ![](docs/screenshots/face-orbita.png) | ![](docs/screenshots/face-retrato.png) | ![](docs/screenshots/transfer.png) | ![](docs/screenshots/battery.png) |
 | **Modo Avocado: esfera Hass** | **Panal Avocado** | **Siempre activa** | **Cargando (Avocado)** |
 | ![](docs/screenshots/avocado-face-hass.png) | ![](docs/screenshots/avocado-grid.png) | ![](docs/screenshots/avocado-aod.png) | ![](docs/screenshots/avocado-charging.png) |
 
@@ -44,6 +46,11 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Música | Página *Reproduciendo* bajo el Centro de control. Portada descargada por Wi-Fi (se puede desactivar en *Ajustes › Música*); sin portada, el texto ocupa todo el ancho. Títulos largos en una línea que se desplaza |
 | Sistema | Centro de control, Smart Stack, pantalla siempre activa (anti-quemado), animación de carga, levantar la muñeca para activar |
 | Ajustes | Bluetooth (emparejar/olvidar iPhone), Wi-Fi (buscar, contraseña, NTP), Pantalla, Apariencia, Hora, Información, Desarrollador (FPS) |
+| Esferas nuevas | **Retrato** (tu foto, enviada desde el iPhone) y **Órbita** (recorrido del sol en el día, salida y puesta, fase lunar) |
+| Enviar al reloj | Portal web en la red Wi-Fi local, solo mientras su pantalla está abierta y con un PIN nuevo cada vez: enviar la foto de Retrato (recorte en el iPhone) o instalar una actualización |
+| Actualizaciones | Dos ranuras de firmware: la actualización se escribe en la otra y, si no arranca bien, el reloj vuelve solo a la anterior |
+| Batería | Tiempo restante estimado, Ahorro de batería y avisos al 20 % y 10 % |
+| Notificaciones | Al abrir una notificación larga se pide al iPhone el mensaje completo (hasta 2 KB) |
 | Texto | Inter para el texto, Noto Emoji monocromo como respaldo para los emojis de las notificaciones (sin compresión RLE, ver [lvgl/lvgl#10293](https://github.com/lvgl/lvgl/issues/10293)) |
 
 ## Gestos y botones
@@ -67,6 +74,8 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 - La pantalla táctil (FT3168) reporta **un solo dedo**: no hay pellizco ni gestos de dos dedos.
 - El detector de toques integrado del QMI8658 no reportó eventos en esta placa, así que el doble toque se detecta por software.
 - No hay motor de vibración: las alarmas y las llamadas suenan por el altavoz.
+- La pantalla trabaja en color de 16 bits: las fotos y portadas se convierten con tramado (dithering) para que los degradados no se vean en franjas.
+- Las esquinas del panel son redondeadas (radio de unos 64 px): la interfaz deja libres esas esquinas.
 
 ## Hardware
 
@@ -125,6 +134,7 @@ A partir de ahí el iPhone se reconecta solo. Comparte las notificaciones si act
 - Para el tiempo, el reloj pide a ipwho.is su ubicación aproximada según la IP pública (una vez por arranque) y envía a Open-Meteo las coordenadas redondeadas a unos 1 km. Se desactiva en la app Tiempo.
 - Las notificaciones no salen del reloj y solo se guardan en RAM.
 - La contraseña del Wi-Fi se guarda en la NVS del reloj.
+- El portal "Enviar al reloj" usa HTTP en la red local y solo existe mientras su pantalla está abierta; cada subida necesita el PIN que muestra el reloj.
 
 ## Seguridad del dispositivo
 

@@ -71,13 +71,34 @@ function clamp() {
   oy = Math.min(0, Math.max(H - h, oy));
 }
 
+/* A phone photo is ~10x larger than the watch: shrinking it in one step
+ * skips pixels and looks jagged. Halve it with high-quality smoothing until
+ * it is close to the size it is drawn at (a mipmap), then draw that. */
+let mip = [];
+function buildMips() {
+  mip = [img];
+  let src = img, w = img.width, h = img.height;
+  while (w > 2 * W * 3 && h > 2 * H * 3) {         /* keep headroom for the zoom */
+    w = Math.round(w / 2); h = Math.round(h / 2);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    x.drawImage(src, 0, 0, w, h);
+    mip.push(c); src = c;
+  }
+}
+
 function draw() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
   if (!img) return;
   clamp();
-  const s = base() * zoom;
-  ctx.drawImage(img, ox, oy, img.width * s, img.height * s);
+  const s = base() * zoom, dw = img.width * s;
+  let src = mip[0];
+  for (const m of mip) if (m.width >= dw * 1.5) src = m; /* smallest level still sharper than needed */
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, ox, oy, dw, img.height * s);
 }
 
 $('file').onchange = (e) => {
@@ -86,6 +107,7 @@ $('file').onchange = (e) => {
   const i = new Image();
   i.onload = () => {
     img = i; zoom = 1; $('zoom').value = 1;
+    buildMips();
     const s = base();
     ox = (W - img.width * s) / 2; oy = (H - img.height * s) / 2;
     $('zoom').disabled = false; $('sendPhoto').disabled = false;
@@ -136,7 +158,7 @@ function upload(path, body, done) {
 
 $('sendPhoto').onclick = () => {
   draw();
-  $('c').toBlob((b) => upload('/photo', b, 'Foto enviada. Elige la esfera Retrato en el reloj.'), 'image/jpeg', 0.86);
+  $('c').toBlob((b) => upload('/photo', b, 'Foto enviada. Elige la esfera Retrato en el reloj.'), 'image/jpeg', 0.95); /* high quality: less JPEG blockiness */
 };
 
 $('sendBin').onclick = () => upload('/update', $('bin').files[0], 'Actualización instalada. El reloj se reinicia.');

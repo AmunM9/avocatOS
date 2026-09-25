@@ -358,6 +358,7 @@ void sim_set_photo(bool on) { s_photo_on = on; s_photo_version++; }
 bool avo_hal_photo(avo_photo_t *out)
 {
     static uint16_t px[410 * 502];
+    static uint8_t rgb[410 * 502 * 3];
     static uint32_t painted;
     if (s_photo_on && painted != s_photo_version) {
         for (int y = 0; y < 502; y++) {
@@ -369,9 +370,11 @@ bool avo_hal_photo(avo_photo_t *out)
                 float hill1 = 330 + 40 * sinf(x / 70.0f), hill2 = 390 + 30 * sinf(x / 45.0f + 1);
                 if (y > hill1) { r = 60; g = 90; b = 70; }
                 if (y > hill2) { r = 30; g = 55; b = 40; }
-                px[y * 410 + x] = (uint16_t)(((int)r >> 3) << 11 | ((int)g >> 2) << 5 | ((int)b >> 3));
+                uint8_t *p = &rgb[3 * (y * 410 + x)];
+                p[0] = (uint8_t)r; p[1] = (uint8_t)g; p[2] = (uint8_t)b;
             }
         }
+        avo_dither_rgb888_to_rgb565(rgb, px, 410, 502); /* same path as the watch */
         painted = s_photo_version;
     }
     *out = (avo_photo_t){ .pixels = s_photo_on ? px : NULL, .w = 410, .h = 502, .version = s_photo_version };

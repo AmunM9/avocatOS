@@ -76,16 +76,23 @@ static bool fetch_cover(const char *artist, const char *title)
         if (board_http_get(search, json, JSON_MAX) > 0 && avo_itunes_artwork_url(json, ART_PX, url, sizeof url)) {
             int n = board_http_get(url, (char *)jpeg, JPEG_MAX);
             int back = s_front == 0 ? 1 : 0;
+            uint8_t *rgb = heap_caps_malloc(ART_PX * ART_PX * 3, MALLOC_CAP_SPIRAM);
             esp_jpeg_image_cfg_t jc = {
                 .indata = jpeg,
                 .indata_size = (uint32_t)(n > 0 ? n : 0),
-                .outbuf = (uint8_t *)s_buf[back],
-                .outbuf_size = ART_PX * ART_PX * 2,
-                .out_format = JPEG_IMAGE_FORMAT_RGB565,
+                .outbuf = rgb,
+                .outbuf_size = ART_PX * ART_PX * 3,
+                .out_format = JPEG_IMAGE_FORMAT_RGB888,
                 .out_scale = JPEG_IMAGE_SCALE_0,
             };
             esp_jpeg_image_output_t out;
-            if (n > 0 && esp_jpeg_decode(&jc, &out) == ESP_OK && out.width <= ART_PX && out.height <= ART_PX) {
+            bool decoded = rgb && n > 0 && esp_jpeg_decode(&jc, &out) == ESP_OK && out.width <= ART_PX &&
+                           out.height <= ART_PX;
+            if (decoded) {
+                avo_dither_rgb888_to_rgb565(rgb, s_buf[back], out.width, out.height); /* no 16-bit bands */
+            }
+            heap_caps_free(rgb);
+            if (decoded) {
                 s_w = out.width;
                 s_h = out.height;
                 s_front = back;

@@ -109,15 +109,24 @@ static bool decode_locked(void)
     }
     bool ok = jpeg && s_px && esp_partition_read(p, DATA_OFFSET, jpeg, h.len) == ESP_OK &&
               esp_rom_crc32_le(0, jpeg, h.len) == h.crc;
-    if (ok) {
+    /* full colour first, then an ordered dither down to 16 bits: the
+     * decoder's own RGB565 output truncates and turns skies into bands */
+    uint8_t *rgb = ok ? heap_caps_malloc(PHOTO_W * PHOTO_H * 3, MALLOC_CAP_SPIRAM) : NULL;
+    if (ok && rgb) {
         esp_jpeg_image_cfg_t cfg = {
             .indata = jpeg, .indata_size = h.len,
-            .outbuf = (uint8_t *)s_px, .outbuf_size = PHOTO_W * PHOTO_H * 2,
-            .out_format = JPEG_IMAGE_FORMAT_RGB565, .out_scale = JPEG_IMAGE_SCALE_0,
+            .outbuf = rgb, .outbuf_size = PHOTO_W * PHOTO_H * 3,
+            .out_format = JPEG_IMAGE_FORMAT_RGB888, .out_scale = JPEG_IMAGE_SCALE_0,
         };
         esp_jpeg_image_output_t out;
         ok = esp_jpeg_decode(&cfg, &out) == ESP_OK && out.width == PHOTO_W && out.height == PHOTO_H;
+        if (ok) {
+            avo_dither_rgb888_to_rgb565(rgb, s_px, PHOTO_W, PHOTO_H);
+        }
+    } else {
+        ok = false;
     }
+    heap_caps_free(rgb);
     heap_caps_free(jpeg);
     if (!ok) {
         ESP_LOGW(TAG, "stored photo unreadable");

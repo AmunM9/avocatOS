@@ -22,6 +22,7 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_random.h"
+#include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -86,10 +87,19 @@ static bool pin_ok(httpd_req_t *req)
     return false;
 }
 
+/* The page is a fixed file inside the firmware (no user content), so its
+ * inline script/style are allowed; nothing else can load or embed it. */
+#define PAGE_CSP "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " \
+                 "img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
 static esp_err_t page_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Content-Security-Policy", PAGE_CSP);
+    httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
+    httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
+    httpd_resp_set_hdr(req, "Referrer-Policy", "no-referrer");
     return httpd_resp_send(req, index_html_start, index_html_end - index_html_start);
 }
 
@@ -251,6 +261,7 @@ bool avo_hal_portal_start(void)
         }
     }
     s_bad_pins = 0;
+    esp_wifi_set_ps(WIFI_PS_NONE); /* full speed while the portal is open */
     portENTER_CRITICAL(&s_lock);
     snprintf(s_st.url, sizeof s_st.url, "http://%s", ip);
     snprintf(s_st.pin, sizeof s_st.pin, "%04u", (unsigned)(esp_random() % 10000));
@@ -265,6 +276,7 @@ void avo_hal_portal_stop(void)
     if (s_srv) {
         httpd_stop(s_srv);
         s_srv = NULL;
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM); /* back to the power-saving default */
     }
     set_state(AVO_PORTAL_OFF, 0, "");
 }

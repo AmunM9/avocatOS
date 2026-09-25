@@ -522,6 +522,14 @@ avo_wx_kind_t avo_wmo_kind(int code);
 const char *avo_wmo_text(int code);  /* "Despejado", "Llovizna", ... */
 
 /* ------------------------------------------------------------------ */
+/* Images                                                              */
+/* ------------------------------------------------------------------ */
+
+/* RGB888 (R,G,B bytes) to RGB565 (little endian) with a 4x4 ordered
+ * (Bayer) dither: smooth gradients instead of 16-bit bands. */
+void avo_dither_rgb888_to_rgb565(const uint8_t *rgb, uint16_t *out, int w, int h);
+
+/* ------------------------------------------------------------------ */
 /* Sun and Moon (Órbita face)                                          */
 /* ------------------------------------------------------------------ */
 
