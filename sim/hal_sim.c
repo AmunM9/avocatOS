@@ -334,3 +334,56 @@ void sim_set_long_track(void)
     s_media.version++;
 }
 
+
+/* ---------------------------------------------------------------- portal, photo, firmware, location */
+static avo_portal_t s_portal;
+static bool s_photo_on;
+static uint32_t s_photo_version = 1;
+
+bool avo_hal_portal_start(void)
+{
+    s_portal = (avo_portal_t){ .state = AVO_PORTAL_WAITING, .version = s_portal.version + 1 };
+    snprintf(s_portal.url, sizeof s_portal.url, "http://192.168.1.42");
+    snprintf(s_portal.pin, sizeof s_portal.pin, "4821");
+    return true;
+}
+
+void avo_hal_portal_stop(void) { s_portal.state = AVO_PORTAL_OFF; s_portal.version++; }
+void avo_hal_portal(avo_portal_t *out) { *out = s_portal; }
+
+void sim_set_photo(bool on) { s_photo_on = on; s_photo_version++; }
+
+/* A made-up landscape (no real photo in the repository): dusk sky, a sun,
+ * two hills. */
+bool avo_hal_photo(avo_photo_t *out)
+{
+    static uint16_t px[410 * 502];
+    static uint32_t painted;
+    if (s_photo_on && painted != s_photo_version) {
+        for (int y = 0; y < 502; y++) {
+            for (int x = 0; x < 410; x++) {
+                float t = y / 502.0f;
+                float r = 250 - 150 * t, g = 120 + 60 * t, b = 90 + 130 * t;
+                float dx = x - 250, dy = y - 250;
+                if (dx * dx + dy * dy < 55 * 55) { r = 255; g = 214; b = 140; }
+                float hill1 = 330 + 40 * sinf(x / 70.0f), hill2 = 390 + 30 * sinf(x / 45.0f + 1);
+                if (y > hill1) { r = 60; g = 90; b = 70; }
+                if (y > hill2) { r = 30; g = 55; b = 40; }
+                px[y * 410 + x] = (uint16_t)(((int)r >> 3) << 11 | ((int)g >> 2) << 5 | ((int)b >> 3));
+            }
+        }
+        painted = s_photo_version;
+    }
+    *out = (avo_photo_t){ .pixels = s_photo_on ? px : NULL, .w = 410, .h = 502, .version = s_photo_version };
+    return s_photo_on;
+}
+
+void avo_hal_photo_delete(void) { sim_set_photo(false); }
+const char *avo_hal_fw_version(void) { return "0.4.0 (sim)"; }
+
+bool avo_hal_location(double *lat, double *lon)
+{
+    *lat = 4.61;
+    *lon = -74.08;
+    return true;
+}

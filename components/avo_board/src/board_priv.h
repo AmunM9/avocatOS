@@ -100,3 +100,14 @@ void board_apple_start(uint16_t conn);   /* link encrypted: discover + subscribe
 void board_apple_stop(void);             /* link lost                          */
 void board_apple_on_notify(uint16_t attr_handle, const struct os_mbuf *om);
 void board_artwork_start(void);          /* album art over Wi-Fi             */
+
+/* Retrato photo ("photo" partition, see partitions.csv). */
+#define PHOTO_W 410
+#define PHOTO_H 502
+#define PHOTO_PART_SUBTYPE 0x40
+#define PHOTO_JPEG_MAX (600 * 1024)
+bool board_photo_check(const uint8_t *jpeg, size_t len);
+esp_err_t board_photo_save(const uint8_t *jpeg, size_t len);
+
+/* Updates: confirm a freshly installed image once it has run for a while. */
+void board_ota_confirm_later(void);

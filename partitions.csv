@@ -1,6 +1,11 @@
-# avocatOS partition table (32 MB flash). OTA slots arrive in phase 4.
-# The app stays below 16 MB: flash beyond that needs 4-byte addressing.
+# avocatOS partition table (32 MB flash). Everything stays below 16 MB:
+# flash beyond that needs 4-byte addressing.
+# Two app slots for updates over Wi-Fi (the previous one is kept for a
+# rollback) and a small data area for the Retrato photo.
 # Name,   Type, SubType, Offset,   Size
 nvs,      data, nvs,     0x9000,   0x6000
-phy_init, data, phy,     0xf000,   0x1000
-factory,  app,  factory, 0x10000,  10M
+otadata,  data, ota,     0xf000,   0x2000
+phy_init, data, phy,     0x11000,  0x1000
+ota_0,    app,  ota_0,   0x20000,  0x700000
+ota_1,    app,  ota_1,   0x720000, 0x700000
+photo,    data, 0x40,    0xE20000, 0x1E0000

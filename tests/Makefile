@@ -5,7 +5,7 @@ CORE    := ../components/avo_core
 CFLAGS  := -std=c11 -Wall -Wextra -Werror -O0 -g -I$(CORE)/include
 SRCS    := $(wildcard $(CORE)/src/*.c)
 BUILD   := build
-SUITES  := test_core test_phone test_phase3
+SUITES  := test_core test_phone test_phase3 test_phase4
 
 .PHONY: test coverage clean
 test: $(addprefix $(BUILD)/,$(SUITES))

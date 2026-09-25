@@ -80,3 +80,13 @@ bool avo_hal_weather(avo_weather_t *out)
     portEXIT_CRITICAL(&s_lock);
     return out->valid;
 }
+
+bool avo_hal_location(double *lat, double *lon)
+{
+    if (!s_located) {
+        return false;
+    }
+    *lat = s_lat;
+    *lon = s_lon;
+    return true;
+}

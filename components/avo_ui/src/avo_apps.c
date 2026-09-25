@@ -470,8 +470,10 @@ static void faces_build(lv_obj_t *scr)
 {
     avo_header_clock(scr);
     lv_obj_t *page = avo_page_create(scr, "Esferas", AVO_HUE_IRIS);
-    static const avo_hue_t hues[AVO_FACE_MAX] = { AVO_HUE_ROSE, AVO_HUE_SKY, AVO_HUE_SOLAR, AVO_HUE_LIME };
-    static const char *const syms[AVO_FACE_MAX] = { AVO_SYM_CLOCK, LV_SYMBOL_LIST, AVO_SYM_STOPWATCH, AVO_SYM_LEAF };
+    static const avo_hue_t hues[AVO_FACE_MAX] = { AVO_HUE_ROSE, AVO_HUE_SKY, AVO_HUE_SOLAR, AVO_HUE_IRIS,
+                                                  AVO_HUE_SOLAR, AVO_HUE_LIME };
+    static const char *const syms[AVO_FACE_MAX] = { AVO_SYM_CLOCK, LV_SYMBOL_LIST, AVO_SYM_STOPWATCH, LV_SYMBOL_IMAGE,
+                                                    AVO_SYM_SUN, AVO_SYM_LEAF };
     for (int i = 0; i < avo_faces_count(); i++) {
         lv_obj_t *r = avo_row(page, hues[i], syms[i], avo_face_name(i),
                               i == avo_settings()->face ? LV_SYMBOL_OK : NULL);
@@ -479,7 +481,8 @@ static void faces_build(lv_obj_t *scr)
     }
     avo_note(page, avo_theme_is_avocado() ? "Hass es exclusiva del Modo Avocado."
                                           : "Activa el Modo Avocado para desbloquear la esfera Hass.");
-    avo_note(page, "También puedes deslizar a los lados sobre la esfera.");
+    avo_note(page, "También puedes deslizar a los lados sobre la esfera. La foto de Retrato se envía "
+                   "desde Ajustes › Enviar al reloj.");
 }
 
 const avo_app_t AVO_APP_FACES = {

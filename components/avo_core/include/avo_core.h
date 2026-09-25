@@ -505,6 +505,32 @@ bool avo_geo_parse(const char *json, double *lat, double *lon, char *city, size_
 avo_wx_kind_t avo_wmo_kind(int code);
 const char *avo_wmo_text(int code);  /* "Despejado", "Llovizna", ... */
 
+/* ------------------------------------------------------------------ */
+/* Sun and Moon (Órbita face)                                          */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    int16_t rise, set;      /* minutes after local midnight           */
+    bool polar_day;         /* the sun never sets that day            */
+    bool polar_night;       /* the sun never rises that day           */
+} avo_sun_t;
+
+/* Sunrise and sunset (official zenith 90.833 deg), about +-2 min.
+ * False on polar days/nights (flags set, rise/set undefined). */
+bool avo_sun_times(double lat, double lon, int year, int month, int day, int16_t utc_offset_min, avo_sun_t *out);
+/* Where the sun sits on a round day/night path, in LVGL degrees
+ * (0 = right, 90 = bottom, clockwise): sunrise 180, noon 270, sunset 360,
+ * and the night runs through the bottom half. */
+double avo_sun_path_angle(const avo_sun_t *s, int minute_of_day);
+
+#define AVO_MOON_SYNODIC 29.530588853
+
+/* Days since the last new moon (mean synodic month; within ~0.7 days). */
+double avo_moon_age(int64_t utc_seconds);
+double avo_moon_illumination(double age);   /* 0 new .. 1 full        */
+bool avo_moon_waxing(double age);
+const char *avo_moon_phase_name(double age);  /* "Luna llena", ...     */
+
 #ifdef __cplusplus
 }
 #endif

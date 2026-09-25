@@ -243,6 +243,7 @@ esp_err_t avo_board_start_ui(void)
     avo_ui_start();
     lvgl_port_unlock();
     board_artwork_start();
+    board_ota_confirm_later(); /* a fresh update proves itself by running */
     ESP_LOGI(TAG, "radios up: internal RAM free %u KB (DMA-capable %u KB)",
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL) / 1024));

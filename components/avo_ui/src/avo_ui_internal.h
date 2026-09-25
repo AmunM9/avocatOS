@@ -58,6 +58,7 @@ bool avo_nav_modal(void);
 void avo_nav_set_scroller(lv_obj_t *scroller);
 lv_obj_t *avo_nav_scroller(void);
 void avo_nav_wake(void);                   /* user-visible event: wake screen  */
+void avo_nav_keep_awake(bool on);          /* e.g. while receiving an update   */
 void avo_nav_face(void);              /* back to the watch face            */
 void avo_nav_grid(void);              /* honeycomb app grid                */
 void avo_nav_app(const avo_app_t *app);
@@ -122,12 +123,19 @@ bool avo_overlay_flick(void);              /* dismiss; false if nothing        *
 /* Short confirmation pill at the top ("Alarma pospuesta…"), ~2 s. */
 void avo_toast(const char *symbol, const char *text);
 /* ---------------------------------------------------------------- faces */
-#define AVO_FACE_MAX 4
+#define AVO_FACE_MAX 6
 int avo_faces_count(void);                   /* depends on theme            */
 const char *avo_face_name(int index);
 lv_obj_t *avo_face_create(int index, lv_obj_t *parent);
 void avo_faces_tick(const avo_time_t *t);    /* 1 Hz update of live faces   */
 void avo_faces_forget(void);                 /* parent screen was deleted   */
+int avo_face_index_by_name(const char *name);  /* -1 if not in this theme     */
+/* shared by avo_faces.c and avo_faces_extra.c */
+lv_obj_t *avo_face_root(lv_obj_t *parent);
+lv_obj_t *avo_face_retrato_create(lv_obj_t *parent, const avo_time_t *t);
+lv_obj_t *avo_face_orbit_create(lv_obj_t *parent, const avo_time_t *t);
+void avo_faces_extra_tick(const avo_time_t *t);
+void avo_faces_extra_forget(void);
 
 /* ---------------------------------------------------------------- panels */
 void avo_grid_build(lv_obj_t *screen);

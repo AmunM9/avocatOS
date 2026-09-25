@@ -184,6 +184,54 @@ void avo_hal_activity(avo_activity_t *out);
 bool avo_hal_alarms_load(avo_alarms_t *out);
 bool avo_hal_alarms_save(const avo_alarms_t *in);
 
+/* ---------------------------------------------------------------- transfer portal */
+/* A small web page served by the watch on the local Wi-Fi, opened from the
+ * iPhone's browser: send a photo for the Retrato face or a firmware update.
+ * It runs only while its screen is open and every upload needs the PIN
+ * shown on the watch. */
+typedef enum {
+    AVO_PORTAL_OFF = 0,
+    AVO_PORTAL_NO_WIFI,        /* needs a Wi-Fi connection               */
+    AVO_PORTAL_WAITING,        /* page ready at `url`                    */
+    AVO_PORTAL_RECEIVING,      /* upload in progress (`percent`)         */
+    AVO_PORTAL_PHOTO_OK,
+    AVO_PORTAL_UPDATE_OK,      /* the watch restarts into the update     */
+    AVO_PORTAL_ERROR,          /* `error` says why                       */
+} avo_portal_state_t;
+
+typedef struct {
+    avo_portal_state_t state;
+    char url[32];
+    char pin[8];
+    uint8_t percent;
+    char error[48];
+    uint32_t version;          /* changes on every state change          */
+} avo_portal_t;
+
+bool avo_hal_portal_start(void);
+void avo_hal_portal_stop(void);
+void avo_hal_portal(avo_portal_t *out);
+
+/* Photo of the Retrato face (RGB565 LE, 410x502), decoded in PSRAM. The
+ * pixels stay valid until `version` changes. False (pixels NULL, version
+ * still set) when there is none. */
+typedef struct {
+    const uint16_t *pixels;
+    uint16_t w, h;
+    uint32_t version;
+} avo_photo_t;
+
+bool avo_hal_photo(avo_photo_t *out);
+void avo_hal_photo_delete(void);
+
+/* Firmware version string and whether it still has to prove it boots
+ * (a new update is confirmed after a minute without problems). */
+const char *avo_hal_fw_version(void);
+
+/* ---------------------------------------------------------------- location */
+/* Approximate location (from the weather lookup). False if unknown. */
+bool avo_hal_location(double *lat, double *lon);
+
 /* ---------------------------------------------------------------- weather */
 /* Last forecast fetched over Wi-Fi (Open-Meteo). False until one arrives. */
 bool avo_hal_weather(avo_weather_t *out);

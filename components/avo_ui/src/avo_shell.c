@@ -57,6 +57,7 @@ static atomic_bool s_awake = true;
 static atomic_bool s_double_tap;
 static atomic_bool s_flick;
 static void (*s_motion_probe)(bool flick);
+static bool s_keep_awake;            /* a screen that must not sleep (transfers) */
 
 static bool s_prev_usb;
 static uint32_t s_tick_count;
@@ -471,6 +472,7 @@ void avo_ui_post_wake(void) { atomic_store(&s_wake_req, true); }
 void avo_ui_post_double_tap(void) { atomic_store(&s_double_tap, true); }
 void avo_ui_post_flick(void) { atomic_store(&s_flick, true); }
 void avo_motion_set_probe(void (*probe)(bool flick)) { s_motion_probe = probe; }
+void avo_nav_keep_awake(bool on) { s_keep_awake = on; }
 void avo_ui_post_sleep(void) { atomic_store(&s_sleep_req, true); }
 bool avo_ui_is_awake(void) { return atomic_load(&s_awake); }
 
@@ -611,10 +613,11 @@ static void tick_cb(lv_timer_t *t)
         woke = (before == AVO_PWR_AOD || before == AVO_PWR_OFF);
         avo_pwr_activity(&s_pwr, now);
     }
-    if (atomic_exchange(&s_sleep_req, false) && !avo_overlay_keeps_awake()) {
+    bool keep = avo_overlay_keeps_awake() || s_keep_awake;
+    if (atomic_exchange(&s_sleep_req, false) && !keep) {
         avo_pwr_sleep(&s_pwr);
     }
-    if (avo_overlay_keeps_awake()) {
+    if (keep) {
         avo_pwr_activity(&s_pwr, now); /* a ringing alarm or a call never dims away */
     }
     bool tap = atomic_exchange(&s_double_tap, false);

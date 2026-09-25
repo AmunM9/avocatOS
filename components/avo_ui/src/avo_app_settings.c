@@ -314,7 +314,9 @@ static void page_info(lv_obj_t *scr)
     s_info.power = avo_info_row(page, "Fuente", "");
 
     avo_section(page, "Reloj");
-    avo_info_row(page, "Sistema", "avocatOS " AVO_VERSION);
+    char ver[40];
+    snprintf(ver, sizeof ver, "avocatOS %s", avo_hal_fw_version());
+    avo_info_row(page, "Sistema", ver);
     avo_info_row(page, "Modelo", "AMOLED 2.06");
     avo_info_row(page, "Chip", si.chip);
     avo_info_row(page, "MAC", si.mac);
@@ -370,6 +372,7 @@ static void push_cb(lv_event_t *e)
     if (build == avo_settings_wifi_page) leave = avo_settings_wifi_leave;
     if (build == avo_settings_bt_page) leave = avo_settings_bt_leave;
     if (build == avo_settings_gestures_page) leave = avo_settings_gestures_leave;
+    if (build == avo_settings_transfer_page) leave = avo_settings_transfer_leave;
     avo_hal_click();
     avo_nav_push(build, leave);
 }
@@ -403,7 +406,9 @@ static void settings_build(lv_obj_t *scr)
     lv_obj_set_flex_flow(txt, LV_FLEX_FLOW_COLUMN);
     lv_obj_remove_flag(txt, LV_OBJ_FLAG_CLICKABLE);
     avo_label(txt, &avo_font_30, p->label, "avocatOS");
-    avo_label(txt, &avo_font_22, p->label2, "Versión " AVO_VERSION);
+    char ver[32];
+    snprintf(ver, sizeof ver, "Versión %s", avo_hal_fw_version());
+    avo_label(txt, &avo_font_22, p->label2, ver);
 
     char wifi[AVO_WIFI_SSID_MAX], ip[16];
     avo_hal_wifi_info(wifi, sizeof wifi, ip, sizeof ip);
@@ -429,6 +434,7 @@ static void settings_build(lv_obj_t *scr)
     nav_row(page, AVO_HUE_MINT, AVO_SYM_TAP, "Gestos", NULL, avo_settings_gestures_page);
 
     avo_section(page, "General");
+    nav_row(page, AVO_HUE_MINT, AVO_SYM_MOBILE, "Enviar al reloj", NULL, avo_settings_transfer_page);
     nav_row(page, AVO_HUE_GRAPHITE, AVO_SYM_INFO, "Información", NULL, page_info);
     nav_row(page, AVO_HUE_IRIS, AVO_SYM_CHIP, "Desarrollador", NULL, page_developer);
 }

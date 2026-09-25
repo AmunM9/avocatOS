@@ -17,3 +17,4 @@ void sim_set_charger(bool on);
 int sim_last_sound(void);
 void sim_set_artwork(bool on);
 void sim_set_long_track(void);
+void sim_set_photo(bool on);

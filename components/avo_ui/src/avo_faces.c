@@ -27,7 +27,9 @@ static const lv_image_dsc_t *const FLUX_DIGITS[10] = {
 #define FACE_FLUX 0
 #define FACE_MODULAR 1
 #define FACE_CHRONO 2
-#define FACE_HASS 3
+#define FACE_RETRATO 3
+#define FACE_ORBIT 4
+#define FACE_HASS 5            /* avocado mode only: always the last one */
 
 #define BATTERY_REFRESH_S 30
 #define FLUX_GAP 6
@@ -36,7 +38,7 @@ static const lv_image_dsc_t *const FLUX_DIGITS[10] = {
 #define CHRONO_SIZE 400
 #define ARC_SIZE 112
 
-static const char *const FACE_NAMES[AVO_FACE_MAX] = { "Flux", "Modular", "Cronógrafo", "Hass" };
+static const char *const FACE_NAMES[AVO_FACE_MAX] = { "Flux", "Modular", "Cronógrafo", "Retrato", "Órbita", "Hass" };
 
 /* live widgets (NULL when the face is not built) */
 static struct {
@@ -64,7 +66,17 @@ static int s_batt_countdown;
 
 int avo_faces_count(void)
 {
-    return avo_theme_is_avocado() ? 4 : 3;
+    return avo_theme_is_avocado() ? FACE_HASS + 1 : FACE_HASS;
+}
+
+int avo_face_index_by_name(const char *name)
+{
+    for (int i = 0; i < avo_faces_count(); i++) {
+        if (strcmp(FACE_NAMES[i], name) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 const char *avo_face_name(int index)
@@ -81,9 +93,10 @@ void avo_faces_forget(void)
     s_flux.last_hm = -1;
     s_mod.last_min = -1;
     s_hass.last_min = -1;
+    avo_faces_extra_forget();
 }
 
-static lv_obj_t *face_root(lv_obj_t *parent)
+lv_obj_t *avo_face_root(lv_obj_t *parent)
 {
     lv_obj_t *root = lv_obj_create(parent);
     lv_obj_remove_style_all(root);
@@ -152,7 +165,7 @@ static void flux_set_digits(const avo_time_t *t)
 
 static lv_obj_t *flux_create(lv_obj_t *parent, const avo_time_t *t)
 {
-    lv_obj_t *root = face_root(parent);
+    lv_obj_t *root = avo_face_root(parent);
     for (int i = 0; i < 4; i++) {
         lv_obj_t *o = lv_obj_create(root);
         lv_obj_remove_style_all(o);
@@ -266,7 +279,7 @@ static void modular_set_time(const avo_time_t *t)
 
 static lv_obj_t *modular_create(lv_obj_t *parent, const avo_time_t *t)
 {
-    lv_obj_t *root = face_root(parent);
+    lv_obj_t *root = avo_face_root(parent);
     const avo_palette_t *p = avo_pal();
     s_mod.date = avo_label(root, &avo_font_26, p->accent, "");
     lv_obj_set_pos(s_mod.date, AVO_PAD + 18, 22);
@@ -340,7 +353,7 @@ static lv_obj_t *chrono_create(lv_obj_t *parent, const avo_time_t *t)
 {
     const avo_palette_t *p = avo_pal();
     bool avo = avo_theme_is_avocado();
-    lv_obj_t *root = face_root(parent);
+    lv_obj_t *root = avo_face_root(parent);
     lv_obj_t *sc = lv_scale_create(root);
     s_chrono.scale = sc;
     lv_obj_set_size(sc, CHRONO_SIZE, CHRONO_SIZE);
@@ -432,7 +445,7 @@ static void hass_set(const avo_time_t *t)
 static lv_obj_t *hass_create(lv_obj_t *parent, const avo_time_t *t)
 {
     const avo_palette_t *p = avo_pal();
-    lv_obj_t *root = face_root(parent);
+    lv_obj_t *root = avo_face_root(parent);
     s_hass.time = avo_label(root, &avo_font_digits_76, p->flesh, "");
     lv_obj_align(s_hass.time, LV_ALIGN_TOP_MID, 0, 16);
 
@@ -476,6 +489,8 @@ lv_obj_t *avo_face_create(int index, lv_obj_t *parent)
     case FACE_MODULAR: return modular_create(parent, &t);
     case FACE_CHRONO: return chrono_create(parent, &t);
     case FACE_HASS: return hass_create(parent, &t);
+    case FACE_RETRATO: return avo_face_retrato_create(parent, &t);
+    case FACE_ORBIT: return avo_face_orbit_create(parent, &t);
     case FACE_FLUX:
     default: return flux_create(parent, &t);
     }
@@ -488,4 +503,5 @@ void avo_faces_tick(const avo_time_t *t)
     modular_tick(t);
     chrono_tick(t);
     hass_tick(t);
+    avo_faces_extra_tick(t);
 }

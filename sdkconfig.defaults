@@ -75,3 +75,6 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 # FPS/CPU meter centred at the bottom: the corners of the panel are rounded
 CONFIG_LV_PERF_MONITOR_ALIGN_BOTTOM_MID=y
+# Updates over Wi-Fi: a new image must confirm itself after booting, or the
+# bootloader goes back to the previous one on the next reset.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

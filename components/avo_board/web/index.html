@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>avocatOS</title>
+<style>
+:root{--bg:#000;--card:#16171a;--line:#2a2c31;--text:#f2f2f2;--muted:#9a9ca3;--lime:#9acd4b;--mint:#30d158;--ember:#ff5a4e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.4 -apple-system,system-ui,sans-serif;padding:24px 18px 48px;max-width:520px;margin-inline:auto}
+h1{font-size:30px;margin:0 0 4px}
+p.sub{color:var(--muted);margin:0 0 20px}
+section{background:var(--card);border-radius:22px;padding:18px;margin:14px 0}
+h2{font-size:20px;margin:0 0 10px}
+.pin{width:100%;font-size:32px;letter-spacing:12px;text-align:center;background:#000;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:10px}
+button,.pick{display:block;width:100%;margin-top:12px;padding:14px;border:0;border-radius:14px;font:600 17px -apple-system,system-ui;text-align:center;cursor:pointer}
+.pick{background:#2a2c31;color:var(--text)}
+button{background:var(--mint);color:#000}
+button:disabled{opacity:.35}
+.frame{position:relative;width:205px;height:251px;margin:14px auto 6px;border-radius:44px;overflow:hidden;background:#222;touch-action:none}
+canvas{width:100%;height:100%;display:block}
+.clock{position:absolute;left:14px;top:14px;color:#fff;font:600 34px -apple-system,system-ui;text-shadow:0 1px 6px #0008;pointer-events:none}
+input[type=range]{width:100%;accent-color:var(--lime)}
+.hint{color:var(--muted);font-size:14px;text-align:center;margin:4px 0 0}
+progress{width:100%;height:8px;margin-top:12px;accent-color:var(--lime)}
+#msg{min-height:1.4em;text-align:center;margin-top:10px}
+.ok{color:var(--mint)}.err{color:var(--ember)}
+</style>
+</head>
+<body>
+<h1>avocatOS 🥑</h1>
+<p class="sub">Envía una foto para la esfera Retrato o instala una actualización.</p>
+
+<section>
+  <h2>PIN del reloj</h2>
+  <input id="pin" class="pin" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="····">
+</section>
+
+<section>
+  <h2>Foto para Retrato</h2>
+  <label class="pick" for="file">Elegir foto</label>
+  <input id="file" type="file" accept="image/*" hidden>
+  <div class="frame" id="frame"><canvas id="c" width="410" height="502"></canvas><div class="clock">10:09</div></div>
+  <input id="zoom" type="range" min="1" max="3" step="0.01" value="1" disabled>
+  <p class="hint">Arrastra la foto para encuadrarla y usa la barra para acercar.</p>
+  <button id="sendPhoto" disabled>Enviar foto</button>
+</section>
+
+<section>
+  <h2>Actualizar avocatOS</h2>
+  <label class="pick" for="bin">Elegir archivo .bin</label>
+  <input id="bin" type="file" accept=".bin" hidden>
+  <p class="hint" id="binName">Usa avocatos.bin de una versión publicada.</p>
+  <button id="sendBin" disabled>Instalar actualización</button>
+</section>
+
+<progress id="bar" max="100" value="0" hidden></progress>
+<p id="msg"></p>
+
+<script>
+const W = 410, H = 502;
+const $ = (id) => document.getElementById(id);
+const ctx = $('c').getContext('2d');
+let img = null, zoom = 1, ox = 0, oy = 0, drag = null;
+
+function base() { return Math.max(W / img.width, H / img.height); }
+
+function clamp() {
+  const s = base() * zoom, w = img.width * s, h = img.height * s;
+  ox = Math.min(0, Math.max(W - w, ox));
+  oy = Math.min(0, Math.max(H - h, oy));
+}
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  if (!img) return;
+  clamp();
+  const s = base() * zoom;
+  ctx.drawImage(img, ox, oy, img.width * s, img.height * s);
+}
+
+$('file').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const i = new Image();
+  i.onload = () => {
+    img = i; zoom = 1; $('zoom').value = 1;
+    const s = base();
+    ox = (W - img.width * s) / 2; oy = (H - img.height * s) / 2;
+    $('zoom').disabled = false; $('sendPhoto').disabled = false;
+    draw();
+  };
+  i.src = URL.createObjectURL(f);
+};
+
+$('zoom').oninput = (e) => {
+  if (!img) return;
+  const before = base() * zoom, cx = (W / 2 - ox) / before, cy = (H / 2 - oy) / before;
+  zoom = parseFloat(e.target.value);
+  const after = base() * zoom;
+  ox = W / 2 - cx * after; oy = H / 2 - cy * after;
+  draw();
+};
+
+const frame = $('frame');
+frame.onpointerdown = (e) => { if (img) { drag = { x: e.clientX, y: e.clientY, ox, oy }; frame.setPointerCapture(e.pointerId); } };
+frame.onpointermove = (e) => {
+  if (!drag) return;
+  const k = W / frame.clientWidth;
+  ox = drag.ox + (e.clientX - drag.x) * k; oy = drag.oy + (e.clientY - drag.y) * k;
+  draw();
+};
+frame.onpointerup = frame.onpointercancel = () => { drag = null; };
+
+$('bin').onchange = (e) => {
+  const f = e.target.files[0];
+  $('binName').textContent = f ? f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB' : '';
+  $('sendBin').disabled = !f;
+};
+
+function say(text, cls) { const m = $('msg'); m.textContent = text; m.className = cls || ''; }
+
+function upload(path, body, done) {
+  const pin = $('pin').value.trim();
+  if (!/^\d{4}$/.test(pin)) { say('Escribe el PIN de 4 cifras que muestra el reloj.', 'err'); return; }
+  const x = new XMLHttpRequest();
+  x.open('POST', path);
+  x.setRequestHeader('X-PIN', pin);
+  x.upload.onprogress = (e) => { if (e.lengthComputable) { $('bar').hidden = false; $('bar').value = e.loaded * 100 / e.total; } };
+  x.onload = () => { $('bar').hidden = true; x.status === 200 ? say(done, 'ok') : say(x.responseText || 'Error ' + x.status, 'err'); };
+  x.onerror = () => { $('bar').hidden = true; say('Se perdió la conexión con el reloj.', 'err'); };
+  say('Enviando…');
+  x.send(body);
+}
+
+$('sendPhoto').onclick = () => {
+  draw();
+  $('c').toBlob((b) => upload('/photo', b, 'Foto enviada. Elige la esfera Retrato en el reloj.'), 'image/jpeg', 0.86);
+};
+
+$('sendBin').onclick = () => upload('/update', $('bin').files[0], 'Actualización instalada. El reloj se reinicia.');
+
+draw();
+</script>
+</body>
+</html>

@@ -245,6 +245,11 @@ static void tour(const char *dir, const char *suffix)
         snprintf(nm, sizeof nm, "face_%s", avo_face_name(i));
         SHOT(nm);
     }
+    sim_set_photo(true);
+    avo_nav_face_select(avo_face_index_by_name("Retrato"));
+    run_ms(1200);                   /* the face notices a new photo within a second */
+    SHOT("face_Retrato_photo");
+    sim_set_photo(false);
     avo_nav_face_select(0);
     avo_nav_grid(); run_ms(500);
     /* drag the honeycomb and grab a frame mid-motion (overlap artifacts) */
@@ -289,6 +294,9 @@ static void tour(const char *dir, const char *suffix)
     avo_nav_push(avo_settings_gestures_page, avo_settings_gestures_leave); SHOT("settings_gestures");
     avo_nav_face(); run_ms(400);
     avo_nav_face_select(1);         SHOT("face_modular_live");
+    avo_nav_app(&AVO_APP_SETTINGS); run_ms(400);
+    avo_nav_push(avo_settings_transfer_page, avo_settings_transfer_leave); SHOT("transfer");
+    avo_nav_face(); run_ms(400);
     avo_nav_face_select(0);
     avo_alert_timer_done(5, NULL);  run_ms(500); write_frame(dir, "timer_done");
     avo_overlay_dismiss(); run_ms(300);
