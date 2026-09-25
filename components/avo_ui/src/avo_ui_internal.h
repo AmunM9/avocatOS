@@ -120,6 +120,9 @@ void avo_overlay_alert(const avo_alert_t *a);
 bool avo_overlay_keeps_awake(void);        /* call or alert on screen          */
 bool avo_overlay_double_tap(void);         /* main action; false if nothing    */
 bool avo_overlay_flick(void);              /* dismiss; false if nothing        */
+/* Battery history (time left) and low-battery warnings; 1 Hz. */
+void avo_battery_tick(void);
+int avo_battery_minutes_left(void);        /* -1 while unknown               */
 /* Short confirmation pill at the top ("Alarma pospuesta…"), ~2 s. */
 void avo_toast(const char *symbol, const char *text);
 /* ---------------------------------------------------------------- faces */

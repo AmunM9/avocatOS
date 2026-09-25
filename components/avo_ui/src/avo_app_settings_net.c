@@ -332,6 +332,9 @@ void avo_settings_wifi_page(lv_obj_t *scr)
     w.screen = scr;
     lv_obj_t *page = avo_subpage_create(scr, "Wi-Fi", AVO_HUE_SKY);
     avo_row_switch(page, AVO_HUE_SKY, LV_SYMBOL_WIFI, "Wi-Fi", avo_settings()->wifi, wifi_sw_cb, NULL);
+    if (avo_settings()->low_power) {
+        avo_note(page, "En pausa por Ahorro de batería (Ajustes › Batería).");
+    }
     w.status = avo_info_row(page, "Estado", wifi_state_text());
     w.ip = avo_info_row(page, "Dirección IP", "—");
 

@@ -24,6 +24,11 @@
 #define NAV_GUARD_MS (AVO_ANIM_MS + 120)
 #define BATTERY_POLL_TICKS 4   /* 1 s */
 #define OFFSET_POLL_TICKS 8    /* 2 s */
+/* Ahorro de batería (like watchOS Low Power Mode): no always-on display,
+ * no Wi-Fi, a shorter screen timeout and a brightness cap. The saved
+ * settings are untouched, so turning it off restores everything. */
+#define LOW_POWER_TIMEOUT_S 10
+#define LOW_POWER_MAX_BRIGHTNESS 50
 
 /* ---------------------------------------------------------------- state */
 static avo_settings_t s_settings;
@@ -67,7 +72,7 @@ avo_settings_t *avo_settings(void) { return &s_settings; }
 
 static void apply_brightness_for_state(void)
 {
-    uint8_t b = s_settings.brightness;
+    uint8_t b = s_settings.low_power ? LV_MIN(s_settings.brightness, LOW_POWER_MAX_BRIGHTNESS) : s_settings.brightness;
     switch (s_pwr.state) {
     case AVO_PWR_ACTIVE: avo_hal_display_brightness(b); break;
     case AVO_PWR_DIM: avo_hal_display_brightness(LV_MAX(5, b * DIM_PERCENT / 100)); break;
@@ -78,11 +83,13 @@ static void apply_brightness_for_state(void)
 
 static void pwr_config_from_settings(uint32_t now)
 {
-    uint32_t sleep_ms = (uint32_t)s_settings.screen_timeout_s * 1000u;
+    uint16_t timeout_s = s_settings.low_power ? LV_MIN(s_settings.screen_timeout_s, LOW_POWER_TIMEOUT_S)
+                                              : s_settings.screen_timeout_s;
+    uint32_t sleep_ms = (uint32_t)timeout_s * 1000u;
     avo_pwr_cfg_t cfg = {
         .dim_after_ms = sleep_ms > 6000 ? sleep_ms - 5000 : sleep_ms / 2,
         .sleep_after_ms = sleep_ms,
-        .aod_enabled = s_settings.aod,
+        .aod_enabled = s_settings.aod && !s_settings.low_power,
     };
     avo_pwr_state_t keep = s_pwr.state;
     avo_pwr_init(&s_pwr, &cfg, now);
@@ -117,7 +124,7 @@ void avo_settings_commit(void)
     avo_hal_settings_save(&s_settings);
     avo_hal_time_set_utc_offset(s_settings.utc_offset_min);
     avo_hal_bt_enable(s_settings.bluetooth);
-    avo_hal_wifi_enable(s_settings.wifi);
+    avo_hal_wifi_enable(s_settings.wifi && !s_settings.low_power);
     pwr_config_from_settings(avo_hal_millis());
     apply_brightness_for_state();
     show_perf_meter(s_settings.show_fps);
@@ -649,6 +656,7 @@ static void clock_cb(lv_timer_t *t)
     avo_time_t now;
     avo_hal_time_now(&now);
     avo_alarms_tick(&now); /* also while the screen sleeps */
+    avo_battery_tick();
     if (s_route == AVO_ROUTE_AOD) {
         avo_aod_tick(&now);
         return;
@@ -698,7 +706,7 @@ void avo_ui_start(void)
 
     avo_hal_time_set_utc_offset(s_settings.utc_offset_min);
     avo_hal_bt_enable(s_settings.bluetooth);
-    avo_hal_wifi_enable(s_settings.wifi);
+    avo_hal_wifi_enable(s_settings.wifi && !s_settings.low_power);
     avo_pwr_init(&s_pwr, &(avo_pwr_cfg_t){ 0 }, avo_hal_millis());
     pwr_config_from_settings(avo_hal_millis());
     apply_brightness_for_state();

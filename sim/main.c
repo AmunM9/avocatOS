@@ -296,6 +296,8 @@ static void tour(const char *dir, const char *suffix)
     avo_nav_face_select(1);         SHOT("face_modular_live");
     avo_nav_app(&AVO_APP_SETTINGS); run_ms(400);
     avo_nav_push(avo_settings_transfer_page, avo_settings_transfer_leave); SHOT("transfer");
+    avo_nav_app(&AVO_APP_SETTINGS); run_ms(400);
+    avo_nav_push(avo_settings_battery_page, NULL); SHOT("battery");
     avo_nav_face(); run_ms(400);
     avo_nav_face_select(0);
     avo_alert_timer_done(5, NULL);  run_ms(500); write_frame(dir, "timer_done");

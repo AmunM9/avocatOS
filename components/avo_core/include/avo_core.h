@@ -107,11 +107,24 @@ avo_pwr_state_t avo_pwr_sleep(avo_pwr_t *p);
 /* Li-ion open-circuit estimate, clamped to 0..100. */
 int avo_batt_percent_from_mv(int millivolts);
 
+/* Time left, from the percentage over the last hour (one sample every few
+ * minutes). Charging clears the history. */
+#define AVO_BATT_HIST 13
+typedef struct {
+    uint32_t minute[AVO_BATT_HIST];
+    uint8_t pct[AVO_BATT_HIST];
+    uint8_t n, head;
+} avo_batt_hist_t;
+
+void avo_batt_hist_add(avo_batt_hist_t *h, uint32_t minute, int percent, bool charging);
+/* Minutes until empty (at most a week), -1 while it cannot tell. */
+int avo_batt_minutes_left(const avo_batt_hist_t *h);
+
 /* ------------------------------------------------------------------ */
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 
-#define AVO_SETTINGS_VERSION 3
+#define AVO_SETTINGS_VERSION 4
 #define AVO_WIFI_SSID_MAX 33
 #define AVO_WIFI_PASS_MAX 65
 
@@ -144,11 +157,14 @@ typedef struct {
     uint16_t step_goal;        /* 1000..50000                            */
     /* ---- version 3 */
     bool artwork;              /* album covers over Wi-Fi (iTunes)       */
+    /* ---- version 4 */
+    bool low_power;            /* Ahorro de batería                      */
 } avo_settings_t;
 
 /* Sizes of stored older blobs (every field before the first new one). */
 #define AVO_SETTINGS_V1_SIZE ((offsetof(avo_settings_t, volume) + 1u) & ~1u)
 #define AVO_SETTINGS_V2_SIZE ((offsetof(avo_settings_t, artwork) + 1u) & ~1u)
+#define AVO_SETTINGS_V3_SIZE ((offsetof(avo_settings_t, low_power) + 1u) & ~1u)
 
 void avo_settings_defaults(avo_settings_t *s);
 /* Clamp every field into its valid range. Returns true if anything changed. */

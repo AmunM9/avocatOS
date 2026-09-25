@@ -84,7 +84,7 @@ static void gestures_step(const avo_settings_t *s, const float a[3], const float
 {
     bool awake = avo_ui_is_awake();
     tap_step(s, a, awake);
-    if (awake && s->wrist_flick) {
+    if (awake && s->wrist_flick && !s->low_power) {
         if (avo_flick_feed(&s_flick, g)) {
             ESP_LOGI(TAG, "wrist flick");
             avo_ui_post_flick();
@@ -110,7 +110,7 @@ static void activity_roll(const avo_settings_t *s)
     avo_activity_t copy = s_act;
     portEXIT_CRITICAL(&s_lock);
     s_new_steps = 0;
-    board_imu_gyro(s->wrist_flick);
+    board_imu_gyro(s->wrist_flick && !s->low_power); /* the gyro is the IMU's big consumer */
     if (++s_since_save >= SAVE_EVERY_S || copy.day != day_before) {
         s_since_save = 0;
         board_nvs_save(NVS_KEY_ACTIVITY, &copy, sizeof copy);

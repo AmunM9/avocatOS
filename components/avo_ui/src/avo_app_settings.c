@@ -424,6 +424,13 @@ static void settings_build(lv_obj_t *scr)
     nav_row(page, AVO_HUE_SKY, AVO_SYM_SUN, "Pantalla", NULL, page_display);
     nav_row(page, AVO_HUE_LIME, AVO_SYM_BRUSH, "Apariencia", avo_theme_is_avocado() ? "Avocado" : "Limpio", page_appearance);
     nav_row(page, AVO_HUE_SOLAR, AVO_SYM_CLOCK, "Hora", NULL, page_time);
+    avo_battery_t bat;
+    avo_hal_battery(&bat);
+    char pct[16] = "";
+    if (bat.percent >= 0) {
+        snprintf(pct, sizeof pct, "%s%d %%", avo_settings()->low_power ? AVO_SYM_LEAF " " : "", bat.percent);
+    }
+    nav_row(page, AVO_HUE_LIME, LV_SYMBOL_BATTERY_FULL, "Batería", pct, avo_settings_battery_page);
     char vol[12] = "No";
     if (avo_settings()->sounds) {
         snprintf(vol, sizeof vol, "%u %%", avo_settings()->volume);

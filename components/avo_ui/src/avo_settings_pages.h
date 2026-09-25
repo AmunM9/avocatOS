@@ -20,3 +20,4 @@ void avo_settings_gestures_page(lv_obj_t *screen);
 void avo_settings_gestures_leave(void);
 void avo_settings_transfer_page(lv_obj_t *screen);
 void avo_settings_transfer_leave(void);
+void avo_settings_battery_page(lv_obj_t *screen);

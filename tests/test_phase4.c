@@ -93,8 +93,72 @@ static void test_day_fraction(void)
     CHECK(avo_sun_path_angle(&s, 0) >= 180.0);                     /* always above    */
 }
 
+/* ---------------- battery estimate ---------------- */
+
+static void test_battery_estimate_linear(void)
+{
+    avo_batt_hist_t h = { 0 };
+    int pct = 80;
+    for (uint32_t m = 0; m <= 200; m += 5) {                 /* 1 % every 10 min */
+        avo_batt_hist_add(&h, m, pct - (int)(m / 10), false);
+    }
+    int left = avo_batt_minutes_left(&h);                     /* 60 % left       */
+    CHECK(left >= 570 && left <= 630);
+}
+
+static void test_battery_estimate_needs_data(void)
+{
+    avo_batt_hist_t h = { 0 };
+    CHECK(avo_batt_minutes_left(&h) == -1);
+    avo_batt_hist_add(&h, 0, 90, false);
+    avo_batt_hist_add(&h, 5, 90, false);
+    CHECK(avo_batt_minutes_left(&h) == -1);                   /* too early        */
+    for (uint32_t m = 10; m <= 60; m += 5) avo_batt_hist_add(&h, m, 90, false);
+    CHECK(avo_batt_minutes_left(&h) == -1);                   /* not dropping     */
+}
+
+static void test_battery_charging_resets(void)
+{
+    avo_batt_hist_t h = { 0 };
+    for (uint32_t m = 0; m <= 60; m += 5) avo_batt_hist_add(&h, m, 70 - (int)(m / 5), false);
+    CHECK(avo_batt_minutes_left(&h) > 0);
+    avo_batt_hist_add(&h, 65, 58, true);
+    CHECK(avo_batt_minutes_left(&h) == -1);
+}
+
+static void test_battery_estimate_caps(void)
+{
+    avo_batt_hist_t h = { 0 };
+    for (uint32_t m = 0; m <= 600; m += 5) avo_batt_hist_add(&h, m, 100 - (int)(m / 300), false);
+    int left = avo_batt_minutes_left(&h);
+    CHECK(left > 0 && left <= 7 * 24 * 60);
+}
+
+/* ---------------- settings v4 ---------------- */
+
+static void test_settings_upgrade_to_v4(void)
+{
+    avo_settings_t s;
+    avo_settings_defaults(&s);
+    CHECK(!s.low_power);
+    s.version = 3;
+    s.artwork = false;
+    memset(&s.low_power, 0xAB, sizeof s - offsetof(avo_settings_t, low_power));
+    CHECK(avo_settings_upgrade(&s, AVO_SETTINGS_V3_SIZE));
+    CHECK(s.version == AVO_SETTINGS_VERSION && !s.artwork && !s.low_power);
+    avo_settings_defaults(&s);
+    s.version = 2;
+    CHECK(avo_settings_upgrade(&s, AVO_SETTINGS_V2_SIZE));
+    CHECK(s.artwork && !s.low_power);
+}
+
 int main(void)
 {
+    RUN(test_battery_estimate_linear);
+    RUN(test_battery_estimate_needs_data);
+    RUN(test_battery_charging_resets);
+    RUN(test_battery_estimate_caps);
+    RUN(test_settings_upgrade_to_v4);
     RUN(test_sun_bogota);
     RUN(test_sun_london_summer);
     RUN(test_sun_sydney);
