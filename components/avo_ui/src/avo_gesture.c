@@ -16,6 +16,7 @@
 typedef enum {
     ACT_NONE = 0,
     ACT_CONTROL_CENTER,  /* open or close */
+    ACT_SMART_STACK,
     ACT_NOTIFICATIONS,
     ACT_FACE,
     ACT_BACK,
@@ -54,7 +55,7 @@ static action_t map_swipe(const avo_swipe_t *sw)
     }
     switch (avo_nav_route()) {
     case AVO_ROUTE_FACE:
-        if (sw->dir == AVO_SWIPE_UP) return ACT_CONTROL_CENTER;
+        if (sw->dir == AVO_SWIPE_UP) return ACT_SMART_STACK; /* Control Center lives on PWR */
         if (sw->dir == AVO_SWIPE_DOWN) return ACT_NOTIFICATIONS;
         return ACT_NONE; /* left/right pages the faces */
     case AVO_ROUTE_CC:
@@ -85,6 +86,7 @@ static void run_pending(void *arg)
     avo_hal_click();
     switch (a) {
     case ACT_CONTROL_CENTER: avo_nav_control_center(); break;
+    case ACT_SMART_STACK: avo_nav_stack(); break;
     case ACT_NOTIFICATIONS: avo_nav_notifications(); break;
     case ACT_FACE: avo_nav_face(); break;
     case ACT_BACK: avo_nav_back(); break;

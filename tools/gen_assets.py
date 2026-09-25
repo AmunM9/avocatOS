@@ -81,7 +81,7 @@ def run_emoji_conv() -> None:
         name = f"avo_emoji_{px}"
         print("font", name, flush=True)
         subprocess.run(LV_FONT_CONV + [
-            "--bpp", "4", "--size", str(px), "--format", "lvgl", "--lv-include", "lvgl.h",
+            "--bpp", "4", "--size", str(px), "--no-compress", "--format", "lvgl", "--lv-include", "lvgl.h",
             "--font", rel(FONT_SRC / EMOJI_TTF), "-r", EMOJI_RANGE,
             "-o", rel(OUT_FONTS / f"{name}.c"),
         ], check=True, cwd=ROOT)

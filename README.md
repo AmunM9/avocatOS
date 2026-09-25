@@ -35,20 +35,20 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Música | Página *Reproduciendo* bajo el Centro de control, con carátula descargada por Wi-Fi |
 | Sistema | Centro de control, Smart Stack, pantalla siempre activa (anti-quemado), animación de carga, levantar la muñeca para activar |
 | Ajustes | Bluetooth (emparejar/olvidar iPhone), Wi-Fi (buscar, contraseña, NTP), Pantalla, Apariencia, Hora, Información, Desarrollador (FPS) |
-| Texto | Inter para el texto, Noto Emoji monocromo como respaldo para los emojis de las notificaciones |
+| Texto | Inter para el texto, Noto Emoji monocromo como respaldo para los emojis de las notificaciones (sin compresión RLE, ver [lvgl/lvgl#10293](https://github.com/lvgl/lvgl/issues/10293)) |
 
 ## Gestos y botones
 
 | Dónde | Gesto | Acción |
 |---|---|---|
-| Esfera | ↑ desde abajo | Centro de control (↑ otra vez: Reproduciendo) |
+| Esfera | ↑ desde abajo | Smart Stack (↓ para cerrarlo) |
 | Esfera | ↓ desde arriba | Notificaciones |
 | Esfera | ← → | Cambiar de esfera |
 | Esfera | mantener pulsado | Elegir esfera |
 | Apps y submenús | → | Atrás |
 | Notificaciones | ↑ desde el borde inferior o → | Volver a la esfera (desplazar la lista nunca la cierra) |
 | Botón **BOOT** | pulsar | Esfera ↔ apps (doble pulsación: última app) |
-| Botón **PWR** | pulsar / mantener | Centro de control / dormir |
+| Botón **PWR** | pulsar / mantener | Centro de control (dentro, ↑ = Reproduciendo) / dormir |
 
 ## Hardware
 

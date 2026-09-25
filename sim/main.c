@@ -140,7 +140,13 @@ static void gesture_checks(void)
     swipe(205, 495, 190, 300, 240);           /* up from the bottom edge */
     expect("deslizar arriba desde el borde cierra Notificaciones", AVO_ROUTE_FACE);
     swipe(200, 420, 225, 240, 260);           /* up with drift */
-    expect("deslizar arriba en la esfera abre Centro de control", AVO_ROUTE_CC);
+    expect("deslizar arriba en la esfera abre Smart Stack", AVO_ROUTE_STACK);
+    swipe(205, 100, 215, 300, 240);
+    expect("deslizar abajo cierra Smart Stack", AVO_ROUTE_FACE);
+    avo_ui_post_button(AVO_BTN_BOOT, AVO_PRESS_LONG); run_ms(800);
+    expect("BOOT largo ya no abre nada", AVO_ROUTE_FACE);
+    avo_ui_post_button(AVO_BTN_PWR, AVO_PRESS_SHORT); run_ms(800);
+    expect("PWR abre Centro de control", AVO_ROUTE_CC);
     swipe(205, 400, 210, 180, 240);           /* up again: Now Playing page */
     expect("deslizar arriba en Centro de control muestra Reproduciendo", AVO_ROUTE_CC);
     swipe(205, 150, 210, 380, 240);           /* down: back to the toggles */
@@ -155,10 +161,6 @@ static void gesture_checks(void)
     avo_nav_app(&AVO_APP_SETTINGS); run_ms(500);
     swipe(60, 300, 290, 330, 260);
     expect("deslizar a la derecha sale de una app", AVO_ROUTE_FACE);
-    avo_ui_post_button(AVO_BTN_BOOT, AVO_PRESS_LONG); run_ms(800);
-    expect("BOOT largo abre Smart Stack", AVO_ROUTE_STACK);
-    swipe(205, 100, 215, 300, 240);
-    expect("deslizar abajo cierra Smart Stack", AVO_ROUTE_FACE);
 }
 
 static void tour(const char *dir, const char *suffix)

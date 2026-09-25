@@ -52,8 +52,11 @@ CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM=n
 CONFIG_LV_USE_SYSMON=y
 CONFIG_LV_USE_PERF_MONITOR=y
 CONFIG_LV_FONT_MONTSERRAT_14=y
-# emoji fallback fonts are RLE-compressed to save flash
-CONFIG_LV_USE_FONT_COMPRESSED=y
+# Fonts are never RLE-compressed: LVGL 9.5 keeps the RLE decoder state in a
+# global, so two SW draw units corrupt glyphs (lvgl/lvgl#10293). The 40 px
+# emoji font is over 1 MB, which needs the large glyph descriptor.
+# CONFIG_LV_USE_FONT_COMPRESSED is not set
+CONFIG_LV_FONT_FMT_TXT_LARGE=y
 CONFIG_LV_USE_LOG=n
 
 

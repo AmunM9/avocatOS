@@ -3,12 +3,12 @@
  * periodic checks that turn phone/battery events into overlays.
  *
  * Navigation model (watchOS inspired):
- *   face  --swipe up-->     Control Center   --swipe down--> back
+ *   face  --swipe up-->     Smart Stack      --swipe down--> face
  *   face  --swipe down-->   Notifications    --swipe up-->   face
  *   face  --swipe L/R-->    next/prev face (tileview)
  *   face  --BOOT-->         app grid --tap--> app --swipe right--> back
- *   BOOT long press         Smart Stack
  *   PWR                     Control Center (overlay, returns to caller)
+ *                           --swipe up--> Now Playing page
  * Swipes are recognized in avo_gesture.c; this file owns the transitions.
  */
 #include <stdatomic.h>
@@ -459,8 +459,9 @@ static void handle_button(avo_btn_t btn, avo_press_t press)
     }
     if (btn == AVO_BTN_BOOT) {
         if (press == AVO_PRESS_LONG) {
-            avo_nav_stack();
-        } else if (press == AVO_PRESS_DOUBLE && s_last_app) {
+            return; /* the Smart Stack moved to swipe up */
+        }
+        if (press == AVO_PRESS_DOUBLE && s_last_app) {
             avo_nav_app(s_last_app);
         } else if (s_route == AVO_ROUTE_FACE) {
             avo_nav_grid();
