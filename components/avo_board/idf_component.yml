@@ -1,0 +1,6 @@
+dependencies:
+  lvgl/lvgl: "9.5.0"
+  espressif/esp_lvgl_port: "~2.9.0"
+  waveshare/esp_lcd_sh8601: "2.0.0"
+  espressif/esp_lcd_touch_ft5x06: "^1.0"
+  espressif/esp_jpeg: "^1.3"

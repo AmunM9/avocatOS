@@ -1,0 +1,112 @@
+/* avocatOS UI internals shared by the shell, faces, panels and apps. */
+#pragma once
+
+#include "lvgl.h"
+#include "avo_core.h"
+#include "avo_hal.h"
+#include "avo_ui.h"
+#include "avo_theme.h"
+#include "avo_symbols.h"
+
+/* ---------------------------------------------------------------- settings */
+avo_settings_t *avo_settings(void);
+/* Persist settings and apply side effects (brightness, theme, radios...). */
+void avo_settings_commit(void);
+
+/* ---------------------------------------------------------------- apps */
+typedef struct avo_app {
+    const char *name;
+    const char *symbol;
+    avo_hue_t hue;
+    void (*build)(lv_obj_t *screen); /* fill a fresh black screen          */
+    void (*leave)(void);             /* optional: stop timers before delete */
+} avo_app_t;
+
+extern const avo_app_t *const AVO_APPS[];
+extern const int AVO_APP_COUNT;
+
+extern const avo_app_t AVO_APP_SETTINGS;
+extern const avo_app_t AVO_APP_MUSIC;
+extern const avo_app_t AVO_APP_STOPWATCH;
+extern const avo_app_t AVO_APP_TIMER;
+extern const avo_app_t AVO_APP_FLASHLIGHT;
+extern const avo_app_t AVO_APP_LEVEL;
+extern const avo_app_t AVO_APP_FACES;
+
+/* ---------------------------------------------------------------- navigation */
+typedef enum {
+    AVO_ROUTE_FACE = 0,
+    AVO_ROUTE_GRID,
+    AVO_ROUTE_APP,
+    AVO_ROUTE_SUB,
+    AVO_ROUTE_STACK,
+    AVO_ROUTE_NOTIF,
+    AVO_ROUTE_CC,
+    AVO_ROUTE_AOD,
+} avo_route_t;
+
+avo_route_t avo_nav_route(void);
+bool avo_nav_locked(void);                 /* a transition is running          */
+/* A sheet/overlay owns the screen: swipes do not navigate. */
+void avo_nav_set_modal(bool on);
+bool avo_nav_modal(void);
+/* The scrollable list of the current screen, so a swipe only closes the
+ * screen when the list is at its edge. Cleared automatically on delete. */
+void avo_nav_set_scroller(lv_obj_t *scroller);
+lv_obj_t *avo_nav_scroller(void);
+void avo_nav_wake(void);                   /* user-visible event: wake screen  */
+void avo_nav_face(void);              /* back to the watch face            */
+void avo_nav_grid(void);              /* honeycomb app grid                */
+void avo_nav_app(const avo_app_t *app);
+void avo_nav_back(void);              /* one level up                      */
+void avo_nav_stack(void);             /* Smart Stack (swipe up on face)    */
+void avo_nav_notifications(void);     /* swipe down on face                */
+void avo_nav_control_center(void);    /* PWR button                        */
+void avo_nav_reload(void);            /* rebuild the current screen        */
+void avo_nav_face_select(int index);  /* jump to a face without animation  */
+/* Sub-page inside an app (e.g. Ajustes > Wi-Fi); swipe right goes back. */
+void avo_nav_push(void (*build)(lv_obj_t *screen), void (*leave)(void));
+
+/* ---------------------------------------------------------------- gestures */
+/* Wraps the pointer read callback with the swipe recognizer. */
+void avo_gesture_install(void);
+
+/* ---------------------------------------------------------------- overlays (lv_layer_top) */
+void avo_overlay_banner(const avo_notif_t *n);
+void avo_overlay_call(const avo_notif_t *n);
+void avo_overlay_charging(const avo_battery_t *b);
+bool avo_overlay_active(void);
+bool avo_overlay_dismiss(void);            /* true if something was closed     */
+void avo_overlays_tick(void);              /* 4 Hz: timeouts, ended calls      */
+/* ---------------------------------------------------------------- faces */
+#define AVO_FACE_MAX 4
+int avo_faces_count(void);                   /* depends on theme            */
+const char *avo_face_name(int index);
+lv_obj_t *avo_face_create(int index, lv_obj_t *parent);
+void avo_faces_tick(const avo_time_t *t);    /* 1 Hz update of live faces   */
+void avo_faces_forget(void);                 /* parent screen was deleted   */
+
+/* ---------------------------------------------------------------- panels */
+void avo_grid_build(lv_obj_t *screen);
+void avo_cc_build(lv_obj_t *screen);
+void avo_stack_build(lv_obj_t *screen);
+void avo_notif_build(lv_obj_t *screen);
+void avo_notif_open_detail(uint32_t uid);  /* from a banner tap                */
+avo_hue_t avo_notif_hue(uint8_t ancs_category);
+const char *avo_notif_symbol(uint8_t ancs_category);
+void avo_aod_build(lv_obj_t *screen);
+void avo_aod_tick(const avo_time_t *t);
+
+/* ---------------------------------------------------------------- media */
+void avo_media_tick(void);                 /* remembers when music last played */
+bool avo_media_recent(void);               /* playing, or paused < 10 min ago  */
+/* Cover, track, transport and volume, filling `parent` from y = top down. */
+lv_obj_t *avo_now_playing_create(lv_obj_t *parent, int32_t top);
+
+/* ---------------------------------------------------------------- misc */
+/* Current time label helper for app headers (top-right, like watchOS). */
+lv_obj_t *avo_header_clock(lv_obj_t *screen);
+void avo_header_clock_refresh(lv_obj_t *label, const avo_time_t *t);
+/* Stopwatch state is global so the Smart Stack can show it. */
+bool avo_stopwatch_running(void);
+uint32_t avo_stopwatch_elapsed(void);

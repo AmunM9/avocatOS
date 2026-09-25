@@ -1,0 +1,72 @@
+# ---- target & flash ---------------------------------------------------------
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# ---- safety: never touch eFuses (no secure boot, no flash encryption) -------
+# CONFIG_SECURE_BOOT is not set
+# CONFIG_SECURE_FLASH_ENC_ENABLED is not set
+
+# ---- performance (Espressif LVGL performance guide) -------------------------
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# ---- PSRAM (8 MB octal) ------------------------------------------------------
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# ---- Bluetooth: NimBLE, buffers in PSRAM -------------------------------------
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+# iPhone link: keep the bond across reboots, bigger ATT packets for ANCS
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_BT_NIMBLE_MAX_BONDS=3
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=247
+
+# ---- LVGL ---------------------------------------------------------------------
+CONFIG_LV_COLOR_DEPTH_16=y
+# LVGL heap in PSRAM (components/avo_board/src/board_lv_mem.c)
+CONFIG_LV_USE_CUSTOM_MALLOC=y
+CONFIG_LV_USE_CLIB_STRING=y
+CONFIG_LV_USE_CLIB_SPRINTF=y
+CONFIG_LV_DEF_REFR_PERIOD=10
+CONFIG_LV_OS_FREERTOS=y
+CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+# LVGL in IRAM pushes IRAM text past the 128 KB reach of the debug vector jump
+# on IDF 6 + GCC 15; the 32 KB instruction cache covers the hot paths instead.
+CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM=n
+CONFIG_LV_USE_SYSMON=y
+CONFIG_LV_USE_PERF_MONITOR=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+# emoji fallback fonts are RLE-compressed to save flash
+CONFIG_LV_USE_FONT_COMPRESSED=y
+CONFIG_LV_USE_LOG=n
+
+
+# ---- internal RAM budget: Wi-Fi + BLE + two DMA draw buffers must coexist ----
+# Wi-Fi/LWIP fast paths leave the shared IRAM/DRAM; buffers go to PSRAM where allowed.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_LWIP_IRAM_OPTIMIZATION=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_RX_BA_WIN=6
+
+# ---- album art over HTTPS: TLS buffers in PSRAM, only the common CA roots ----
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y

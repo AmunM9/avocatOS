@@ -1,0 +1,10 @@
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+sim/build/
+tests/build/
+*.bin
+*.log
+.DS_Store
+avocatos_sim_settings.bin
