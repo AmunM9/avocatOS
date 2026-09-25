@@ -209,6 +209,48 @@ static void test_ancs_attrs_fragmented(void)
     }
 }
 
+/* ---------------- full message on demand ---------------- */
+
+static void test_ancs_get_message_request(void)
+{
+    uint8_t b[16];
+    size_t n = avo_ancs_build_get_message(0x01020304, 2000, b, sizeof b);
+    const uint8_t want[] = { 0x00, 0x04, 0x03, 0x02, 0x01, 0x03, 0xD0, 0x07 };
+    CHECK(n == sizeof want && memcmp(b, want, n) == 0);
+    CHECK(avo_ancs_build_get_message(1, 10, b, 4) == 0);
+}
+
+static size_t message_response(uint8_t *b, uint32_t uid, const char *msg)
+{
+    size_t n = 0, len = strlen(msg);
+    b[n++] = 0;
+    b[n++] = (uint8_t)uid; b[n++] = (uint8_t)(uid >> 8); b[n++] = (uint8_t)(uid >> 16); b[n++] = (uint8_t)(uid >> 24);
+    b[n++] = 3; b[n++] = (uint8_t)len; b[n++] = (uint8_t)(len >> 8);
+    memcpy(b + n, msg, len);
+    return n + len;
+}
+
+static void test_ancs_parse_message(void)
+{
+    static uint8_t b[1200];
+    char body[1001];
+    for (int i = 0; i < 1000; i++) body[i] = (char)('a' + i % 26);
+    body[1000] = '\0';
+    size_t n = message_response(b, 0x77, body);
+    static char out[1100];
+    uint32_t uid = 0;
+    CHECK(avo_ancs_parse_message(b, n, &uid, out, sizeof out) == (int)n);
+    CHECK(uid == 0x77 && strlen(out) == 1000 && memcmp(out, body, 1000) == 0);
+    for (size_t cut = 1; cut < n; cut += 97) {
+        CHECK(avo_ancs_parse_message(b, cut, &uid, out, sizeof out) == 0); /* wait for more */
+    }
+    char small[16];
+    CHECK(avo_ancs_parse_message(b, n, &uid, small, sizeof small) == (int)n);
+    CHECK(strlen(small) == 15);
+    b[5] = 1; /* not a message attribute */
+    CHECK(avo_ancs_parse_message(b, n, &uid, out, sizeof out) == -1);
+}
+
 static void test_ancs_attrs_truncates_long_values(void)
 {
     uint8_t b[512];
@@ -320,6 +362,8 @@ int main(void)
     RUN(test_ancs_attrs_complete);
     RUN(test_ancs_attrs_fragmented);
     RUN(test_ancs_attrs_truncates_long_values);
+    RUN(test_ancs_get_message_request);
+    RUN(test_ancs_parse_message);
     RUN(test_ancs_attrs_malformed);
     RUN(test_ancs_action);
     RUN(test_app_names);

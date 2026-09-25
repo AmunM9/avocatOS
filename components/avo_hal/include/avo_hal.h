@@ -118,6 +118,10 @@ int avo_hal_notif_list(avo_notif_t *out, int max);
 /* positive: accept call / open; negative: decline / clear on the iPhone too. */
 void avo_hal_notif_action(uint32_t uid, bool positive);
 void avo_hal_notif_dismiss_local(uint32_t uid);
+/* Ask the iPhone for the whole message of `uid` (the list holds its first
+ * AVO_ANCS_MESSAGE_MAX bytes); avo_hal_notif_full() is true once it arrived. */
+void avo_hal_notif_request_full(uint32_t uid);
+bool avo_hal_notif_full(uint32_t uid, char *out, size_t cap);
 /* Returns a newly arrived, alert-worthy notification once (for the banner). */
 bool avo_hal_notif_take_alert(avo_notif_t *out);
 

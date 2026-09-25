@@ -226,7 +226,7 @@ void sim_phone_connect(void)
     snprintf(s_media.title, sizeof s_media.title, "Aguacate Tropical");
     snprintf(s_media.artist, sizeof s_media.artist, "Los Hass");
     snprintf(s_media.album, sizeof s_media.album, "Guacamole");
-    add_notif(101, AVO_ANCS_CAT_EMAIL, "Mail", "Factura de septiembre", "Tu factura ya está disponible. Vence el 30 de septiembre.", false);
+    add_notif(101, AVO_ANCS_CAT_EMAIL, "Mail", "Factura de septiembre", "Hola, tu factura de septiembre ya está disponible en la app. El valor total es de 84.900 y vence el 30 de septiembre. Puedes pagarla con débito automático o en cualquier punto autorizado. Gracias por confiar en nosotros.", false);
     add_notif(102, AVO_ANCS_CAT_SCHEDULE, "Calendario", "Revisión de diseño", "Empieza en 10 minutos · Sala Hass", false);
     add_notif(103, AVO_ANCS_CAT_SOCIAL, "WhatsApp", "Laura", "¿Nos vemos a las 7 en el parque? Llevo el aguacate para la tostada.", false);
 }
@@ -261,6 +261,27 @@ void avo_hal_notif_dismiss_local(uint32_t uid)
             return;
         }
     }
+}
+
+static uint32_t s_full_uid;
+static uint32_t s_full_at;
+
+void avo_hal_notif_request_full(uint32_t uid) { s_full_uid = uid; s_full_at = sim_millis() + 300; }
+
+/* Like the iPhone, the whole text arrives a moment after asking for it. */
+bool avo_hal_notif_full(uint32_t uid, char *out, size_t cap)
+{
+    if (uid != s_full_uid || (int32_t)(sim_millis() - s_full_at) < 0) return false;
+    for (int i = 0; i < s_notif_count; i++) {
+        if (s_notifs[i].uid != uid) continue;
+        snprintf(out, cap, "Hola, tu factura de septiembre ya está disponible en la app. El valor total es de 84.900 "
+                 "y vence el 30 de septiembre. Puedes pagarla con débito automático o en cualquier punto autorizado. "
+                 "Gracias por confiar en nosotros.\n\nDetalle del consumo: plan base 59.900, datos adicionales 15.000 "
+                 "y servicios de valor agregado 10.000. Si tienes preguntas, responde a este correo o escríbenos "
+                 "por el chat de la app, de lunes a sábado de 7 a. m. a 9 p. m.");
+        return true;
+    }
+    return false;
 }
 
 void avo_hal_notif_action(uint32_t uid, bool positive) { (void)positive; avo_hal_notif_dismiss_local(uid); }

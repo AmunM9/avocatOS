@@ -6,8 +6,14 @@
 #define REFRESH_MS 500
 #define CARD_MSG_H 56 /* two lines of message in the list */
 
+#define FULL_POLL_MS 150
+#define FULL_WAIT_MS 5000
+
 static struct {
     lv_obj_t *screen, *list, *sheet;
+    lv_obj_t *sheet_msg, *sheet_loading; /* message label, "cargando…" hint    */
+    lv_timer_t *full_timer;               /* waits for the whole message        */
+    uint32_t full_since;
     lv_timer_t *timer;
     uint32_t version;
     avo_notif_t items[AVO_NOTIF_MAX];
@@ -58,8 +64,43 @@ static const avo_notif_t *find(uint32_t uid)
 
 /* ================================================================= detail sheet */
 
+static void full_stop(void)
+{
+    if (nc.full_timer) {
+        lv_timer_delete(nc.full_timer);
+        nc.full_timer = NULL;
+    }
+}
+
+/* The list keeps only the start of each message; the sheet asks the iPhone
+ * for the whole text and swaps it in when it arrives. */
+static void full_poll_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (!nc.sheet) {
+        full_stop();
+        return;
+    }
+    uint32_t uid = (uint32_t)(uintptr_t)lv_obj_get_user_data(nc.sheet);
+    char *buf = lv_malloc(AVO_ANCS_FULL_MAX); /* LVGL heap lives in PSRAM */
+    bool got = buf && avo_hal_notif_full(uid, buf, AVO_ANCS_FULL_MAX);
+    if (got && strlen(buf) > strlen(lv_label_get_text(nc.sheet_msg))) {
+        lv_label_set_text(nc.sheet_msg, buf);
+    }
+    lv_free(buf);
+    if (got || lv_tick_elaps(nc.full_since) > FULL_WAIT_MS) {
+        if (nc.sheet_loading) {
+            lv_obj_delete(nc.sheet_loading);
+            nc.sheet_loading = NULL;
+        }
+        full_stop();
+    }
+}
+
 static void sheet_close(void)
 {
+    full_stop();
+    nc.sheet_msg = nc.sheet_loading = NULL;
     if (nc.sheet) {
         lv_obj_delete(nc.sheet);
         nc.sheet = NULL;
@@ -128,6 +169,14 @@ static void open_sheet(const avo_notif_t *n)
     lv_obj_t *m = avo_label(nc.sheet, &avo_font_26, p->label, n->message);
     lv_obj_set_width(m, lv_pct(100));
     lv_label_set_long_mode(m, LV_LABEL_LONG_MODE_WRAP);
+    nc.sheet_msg = m;
+    if (strlen(n->message) >= AVO_ANCS_MESSAGE_MAX - 8) {
+        /* the list copy was cut: fetch the rest (emails, long chats) */
+        nc.sheet_loading = avo_label(nc.sheet, &avo_font_22, p->label2, "Cargando el mensaje completo…");
+        avo_hal_notif_request_full(n->uid);
+        nc.full_since = lv_tick_get();
+        nc.full_timer = lv_timer_create(full_poll_cb, FULL_POLL_MS, NULL);
+    }
 
     if (n->category == AVO_ANCS_CAT_INCOMING_CALL) {
         pill(nc.sheet, "Aceptar", lv_color_hex(0x30D158), lv_color_white(), 1);
@@ -260,6 +309,7 @@ static void screen_deleted_cb(lv_event_t *e)
     if (nc.timer) {
         lv_timer_delete(nc.timer);
     }
+    full_stop();
     memset(&nc, 0, sizeof nc);
 }
 

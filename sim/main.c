@@ -264,6 +264,8 @@ static void tour(const char *dir, const char *suffix)
     avo_nav_face(); run_ms(400);
     avo_nav_notifications();        SHOT("notifications");
     avo_notif_open_detail(103);     SHOT("notification_detail");
+    avo_notif_open_detail(101);     run_ms(100); write_frame(dir, suffix[0] == 'c' ? "notification_loading_clean" : "notification_loading_avocado");
+    run_ms(600);                    SHOT("notification_full");
     avo_nav_face(); run_ms(400);
     avo_nav_app(&AVO_APP_MUSIC);    SHOT("music");
     sim_set_artwork(true);          run_ms(400); SHOT("music_cover");

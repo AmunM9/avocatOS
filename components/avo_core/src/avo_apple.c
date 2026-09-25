@@ -73,6 +73,44 @@ size_t avo_ancs_build_get_attrs(uint32_t uid, uint8_t *out, size_t cap)
     return i;
 }
 
+size_t avo_ancs_build_get_message(uint32_t uid, uint16_t max_len, uint8_t *out, size_t cap)
+{
+    const size_t need = 8;
+    if (cap < need) {
+        return 0;
+    }
+    out[0] = ANCS_CMD_GET_NOTIF_ATTRS;
+    wr32(out + 1, uid);
+    out[5] = ANCS_ATTR_MESSAGE;
+    out[6] = (uint8_t)max_len;
+    out[7] = (uint8_t)(max_len >> 8);
+    return need;
+}
+
+int avo_ancs_parse_message(const uint8_t *d, size_t n, uint32_t *uid, char *out, size_t cap)
+{
+    if (n < 1) {
+        return 0;
+    }
+    if (d[0] != ANCS_CMD_GET_NOTIF_ATTRS) {
+        return -1;
+    }
+    if (n < ANCS_HEADER + 3) {
+        return 0;
+    }
+    if (d[ANCS_HEADER] != ANCS_ATTR_MESSAGE) {
+        return -1;
+    }
+    size_t len = (size_t)d[ANCS_HEADER + 1] | (size_t)d[ANCS_HEADER + 2] << 8;
+    size_t end = ANCS_HEADER + 3 + len;
+    if (n < end) {
+        return 0;
+    }
+    *uid = rd32(d + 1);
+    copy_utf8(out, cap, d + ANCS_HEADER + 3, len);
+    return (int)end;
+}
+
 int avo_ancs_parse_attrs(const uint8_t *d, size_t n, avo_ancs_attrs_t *out)
 {
     if (n < 1) {

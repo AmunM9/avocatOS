@@ -7,6 +7,9 @@
 /* Screen geometry of the 2.06" AMOLED */
 #define AVO_W 410
 #define AVO_H 502
+/* The visible panel has rounded corners (radius ~64 px): keep text and
+ * controls out of the 64x64 corner squares, or inset them by AVO_PAD. */
+#define AVO_CORNER_R 64
 #define AVO_PAD 20        /* side margin inside the rounded glass        */
 #define AVO_TOP 18        /* top inset for titles / status                */
 #define AVO_RADIUS_CARD 28

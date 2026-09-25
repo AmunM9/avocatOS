@@ -14,7 +14,12 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "esp_heap_caps.h"
 #include "host/ble_hs.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function" /* FreeRTOS atomic.h helpers */
+#include "nimble/nimble_port.h"
+#pragma GCC diagnostic pop
 #include "board_priv.h"
 
 static const char *TAG = "board_apple";
@@ -54,6 +59,7 @@ typedef enum {
 typedef struct {
     uint32_t uid;
     uint8_t category, flags;
+    bool full;        /* the whole message of an opened notification */
 } pending_t;
 
 static struct {
@@ -86,6 +92,19 @@ static avo_media_t s_media;
 #define UNLOCK() xSemaphoreGive(s_mtx)
 
 static void step_next(void);
+
+/* The whole message of the notification opened on the watch. The response
+ * (up to AVO_ANCS_FULL_MAX bytes over several packets) is assembled in PSRAM. */
+#define FULL_DS_SIZE (AVO_ANCS_FULL_MAX + 16)
+static struct {
+    uint32_t uid;
+    bool ready;
+    char *text;                 /* guarded by s_mtx */
+    uint8_t *ds;                /* host task only   */
+    size_t ds_len;
+} s_full;
+static struct ble_npl_event s_full_ev;
+static volatile uint32_t s_full_want;
 
 /* ================================================================= store helpers */
 
@@ -162,8 +181,10 @@ static void ancs_pump(void)
     memmove(&ap.queue[0], &ap.queue[1], (size_t)(ap.q_len - 1) * sizeof ap.queue[0]);
     ap.q_len--;
     uint8_t req[16];
-    size_t n = avo_ancs_build_get_attrs(ap.current.uid, req, sizeof req);
+    size_t n = ap.current.full ? avo_ancs_build_get_message(ap.current.uid, AVO_ANCS_FULL_MAX - 1, req, sizeof req)
+                               : avo_ancs_build_get_attrs(ap.current.uid, req, sizeof req);
     ap.ds_len = 0;
+    s_full.ds_len = 0;
     ap.outstanding = ble_gattc_write_flat(ap.conn, ap.chr[C_CP].val, req, (uint16_t)n, cp_write_cb, NULL) == 0;
     ap.sent_at = esp_timer_get_time();
 }
@@ -186,8 +207,39 @@ static void on_notification_source(const uint8_t *d, size_t n)
     ancs_pump();
 }
 
+static void on_full_message(const uint8_t *d, size_t n)
+{
+    if (!s_full.ds || s_full.ds_len + n > FULL_DS_SIZE) {
+        s_full.ds_len = 0;
+        ap.outstanding = false;
+        ancs_pump();
+        return;
+    }
+    memcpy(s_full.ds + s_full.ds_len, d, n);
+    s_full.ds_len += n;
+    uint32_t uid = 0;
+    LOCK();
+    int used = avo_ancs_parse_message(s_full.ds, s_full.ds_len, &uid, s_full.text, AVO_ANCS_FULL_MAX);
+    if (used > 0) {
+        avo_text_clean(s_full.text);
+        s_full.uid = uid;
+        s_full.ready = true;
+    }
+    UNLOCK();
+    if (used == 0) {
+        return; /* wait for the next fragment */
+    }
+    s_full.ds_len = 0;
+    ap.outstanding = false;
+    ancs_pump();
+}
+
 static void on_data_source(const uint8_t *d, size_t n)
 {
+    if (ap.current.full) {
+        on_full_message(d, n);
+        return;
+    }
     if (ap.ds_len + n > sizeof ap.ds) {
         ap.ds_len = 0; /* runaway response: drop it */
         ap.outstanding = false;
@@ -481,10 +533,29 @@ static void step_next(void)
 
 /* ================================================================= lifecycle */
 
+/* Runs in the NimBLE host task: the request goes first in the queue. */
+static void full_request_ev(struct ble_npl_event *ev)
+{
+    (void)ev;
+    if (ap.conn == BLE_HS_CONN_HANDLE_NONE) {
+        return;
+    }
+    if (ap.q_len == QUEUE_MAX) {
+        ap.q_len--; /* the oldest pending title can wait for the next event */
+    }
+    memmove(&ap.queue[1], &ap.queue[0], (size_t)ap.q_len * sizeof ap.queue[0]);
+    ap.queue[0] = (pending_t){ .uid = s_full_want, .full = true };
+    ap.q_len++;
+    ancs_pump();
+}
+
 void board_apple_init(void)
 {
     if (!s_mtx) {
         s_mtx = xSemaphoreCreateMutex();
+        s_full.text = heap_caps_calloc(1, AVO_ANCS_FULL_MAX, MALLOC_CAP_SPIRAM);
+        s_full.ds = heap_caps_malloc(FULL_DS_SIZE, MALLOC_CAP_SPIRAM);
+        ble_npl_event_init(&s_full_ev, full_request_ev, NULL);
     }
     memset(&ap, 0, sizeof ap);
     ap.conn = BLE_HS_CONN_HANDLE_NONE;
@@ -555,6 +626,33 @@ void avo_hal_notif_action(uint32_t uid, bool positive)
     if (!positive) {
         avo_hal_notif_dismiss_local(uid);
     }
+}
+
+void avo_hal_notif_request_full(uint32_t uid)
+{
+    if (!s_mtx || !s_full.text) {
+        return;
+    }
+    LOCK();
+    s_full.ready = false;
+    s_full.uid = uid;
+    UNLOCK();
+    s_full_want = uid;
+    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_full_ev);
+}
+
+bool avo_hal_notif_full(uint32_t uid, char *out, size_t cap)
+{
+    if (!s_mtx || !s_full.text) {
+        return false;
+    }
+    LOCK();
+    bool ok = s_full.ready && s_full.uid == uid;
+    if (ok) {
+        strlcpy(out, s_full.text, cap);
+    }
+    UNLOCK();
+    return ok;
 }
 
 void avo_hal_notif_dismiss_local(uint32_t uid)

@@ -90,6 +90,26 @@ static void pwr_config_from_settings(uint32_t now)
 
 static void rebuild_face_screen(void);
 
+/* FPS / CPU meter (Ajustes > Desarrollador), centred and lifted off the
+ * curved bottom edge of the panel. */
+#define PERF_METER_LIFT 10
+
+static void show_perf_meter(bool on)
+{
+    if (!on) {
+        lv_sysmon_hide_performance(NULL);
+        return;
+    }
+    lv_sysmon_show_performance(NULL);
+    lv_obj_t *sys = lv_layer_sys();
+    for (uint32_t i = 0; i < lv_obj_get_child_count(sys); i++) {
+        lv_obj_t *c = lv_obj_get_child(sys, (int32_t)i);
+        if (lv_obj_check_type(c, &lv_label_class)) {
+            lv_obj_align(c, LV_ALIGN_BOTTOM_MID, 0, -PERF_METER_LIFT);
+        }
+    }
+}
+
 void avo_settings_commit(void)
 {
     avo_settings_sanitize(&s_settings, (uint8_t)AVO_FACE_MAX);
@@ -99,11 +119,7 @@ void avo_settings_commit(void)
     avo_hal_wifi_enable(s_settings.wifi);
     pwr_config_from_settings(avo_hal_millis());
     apply_brightness_for_state();
-    if (s_settings.show_fps) {
-        lv_sysmon_show_performance(NULL);
-    } else {
-        lv_sysmon_hide_performance(NULL);
-    }
+    show_perf_meter(s_settings.show_fps);
     if (s_settings.theme != s_applied_theme) {
         s_applied_theme = (avo_theme_mode_t)s_settings.theme;
         avo_theme_apply(s_applied_theme);
@@ -683,11 +699,7 @@ void avo_ui_start(void)
     avo_pwr_init(&s_pwr, &(avo_pwr_cfg_t){ 0 }, avo_hal_millis());
     pwr_config_from_settings(avo_hal_millis());
     apply_brightness_for_state();
-    if (s_settings.show_fps) {
-        lv_sysmon_show_performance(NULL);
-    } else {
-        lv_sysmon_hide_performance(NULL);
-    }
+    show_perf_meter(s_settings.show_fps);
     avo_battery_t b;
     avo_hal_battery(&b);
     s_prev_usb = b.usb; /* no charging animation for a cable that was already there */

@@ -254,6 +254,12 @@ size_t avo_ancs_build_get_attrs(uint32_t uid, uint8_t *out, size_t cap);
  * Returns bytes consumed when complete, 0 when more data is needed,
  * -1 when the data is malformed. */
 int avo_ancs_parse_attrs(const uint8_t *d, size_t n, avo_ancs_attrs_t *out);
+/* The whole message of one notification (the list only asks for its start). */
+#define AVO_ANCS_FULL_MAX 2048
+size_t avo_ancs_build_get_message(uint32_t uid, uint16_t max_len, uint8_t *out, size_t cap);
+/* Response to it: bytes consumed when complete, 0 = need more, -1 = malformed.
+ * The text is truncated to `cap` - 1 bytes on a UTF-8 boundary. */
+int avo_ancs_parse_message(const uint8_t *d, size_t n, uint32_t *uid, char *out, size_t cap);
 /* Perform Notification Action: positive (accept/open) or negative (decline/clear). */
 size_t avo_ancs_build_action(uint32_t uid, bool positive, uint8_t *out, size_t cap);
 /* Friendly name for common bundle ids, else the last part of the id. */
