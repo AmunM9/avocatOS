@@ -219,18 +219,100 @@ void board_rtc_store(time_t utc)
 #define QMI_CTRL3 0x04
 #define QMI_CTRL5 0x06
 #define QMI_CTRL7 0x08
+#define QMI_CTRL8 0x09
+#define QMI_CTRL9 0x0A
+#define QMI_CAL1_L 0x0B                   /* CAL1_L..CAL3_H: 0x0B..0x10     */
+#define QMI_CAL4_H 0x12
+#define QMI_STATUS_INT 0x2D
+#define QMI_STATUS1 0x2F
 #define QMI_AX_L 0x35                     /* ax ay az gx gy gz, 12 bytes    */
+#define QMI_TAP_STATUS 0x59
 #define QMI_ACC_SCALE (4.0f / 32768.0f)   /* +-4 g                          */
 #define QMI_GYR_SCALE (512.0f / 32768.0f) /* +-512 dps                      */
-#define QMI_ACC_CFG 0x16  /* +-4 g, 125 Hz                                  */
-#define QMI_GYR_CFG 0x56  /* +-512 dps, 125 Hz                              */
-/* low-pass at 13 % of ODR (~16 Hz) for both sensors: wide enough to keep the
- * sharp spike of a knock on the case */
-#define QMI_LPF_CFG 0x77
+/* The tap engine needs >= 500 Hz and an unfiltered accelerometer (SensorLib
+ * qmi8658_tap_detection notes); our 100 Hz reads keep their own low-pass. */
+#define QMI_ACC_CFG 0x14                  /* +-4 g, 500 Hz                  */
+#define QMI_GYR_CFG 0x54                  /* +-512 dps, 500 Hz              */
+#define QMI_LPF_CFG 0x70                  /* gyro LPF 13 % of ODR, accel off */
 #define QMI_EN_ACC 0x01
 #define QMI_EN_GYR 0x02
+#define QMI_CTRL8_HANDSHAKE 0x80          /* CTRL9 done flag in STATUS_INT  */
+#define QMI_CTRL8_TAP 0x01
+#define QMI_CMD_ACK 0x00
+#define QMI_CMD_CONFIGURE_TAP 0x0C
+#define QMI_CMD_DONE 0x80
+#define QMI_STATUS1_TAP 0x02
+#define QMI_TAP_TYPE_MASK 0x03
+#define QMI_CMD_TIMEOUT_MS 50
 
-static bool s_gyro_on;
+/* Tap engine parameters in samples at 500 Hz and g^2 (the values of the
+ * SensorLib example, with a longer double-tap window for a relaxed pace). */
+#define TAP_PEAK_WINDOW 20
+#define TAP_PRIORITY_Z_Y_X 0x05           /* the case is knocked along z    */
+#define TAP_WINDOW 55                     /* 110 ms                         */
+#define TAP_DOUBLE_WINDOW 180             /* 360 ms between the two taps    */
+#define TAP_ALPHA 8                       /* 0.0625 * 128                   */
+#define TAP_GAMMA 32                      /* 0.25 * 128                     */
+#define TAP_PEAK_MG2 300                  /* 0.30 g^2                       */
+#define TAP_QUIET_MG2 180                 /* 0.18 g^2                       */
+
+static bool s_gyro_on, s_tap_hw;
+
+static bool wait_cmd_flag(bool set)
+{
+    for (int t = 0; t < QMI_CMD_TIMEOUT_MS; t++) {
+        uint8_t st = 0;
+        if (board_reg_read(s_imu, QMI_STATUS_INT, &st, 1) == ESP_OK && st != 0xFF &&
+            ((st & QMI_CMD_DONE) != 0) == set) {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    return false;
+}
+
+/* CTRL9 command with the STATUS_INT handshake: done -> ack -> cleared. */
+static bool imu_command(uint8_t cmd)
+{
+    if (board_reg_write(s_imu, QMI_CTRL9, cmd) != ESP_OK || !wait_cmd_flag(true)) {
+        return false;
+    }
+    board_reg_write(s_imu, QMI_CTRL9, QMI_CMD_ACK);
+    return wait_cmd_flag(false);
+}
+
+/* CAL1_L..CAL3_H, then CAL4_H (which selects the parameter page); CAL4_L
+ * is left alone, as in SensorLib. */
+static void write_cal(const uint8_t v[7])
+{
+    for (int i = 0; i < 6; i++) {
+        board_reg_write(s_imu, QMI_CAL1_L + i, v[i]);
+    }
+    board_reg_write(s_imu, QMI_CAL4_H, v[6]);
+}
+
+/* Configure the hardware tap detector (sensors must be disabled). */
+static bool tap_configure(void)
+{
+    const uint8_t first[7] = {
+        TAP_PEAK_WINDOW, TAP_PRIORITY_Z_Y_X,
+        TAP_WINDOW & 0xFF, TAP_WINDOW >> 8,
+        TAP_DOUBLE_WINDOW & 0xFF, TAP_DOUBLE_WINDOW >> 8,
+        0x01,
+    };
+    const uint8_t second[7] = {
+        TAP_ALPHA, TAP_GAMMA,
+        TAP_PEAK_MG2 & 0xFF, TAP_PEAK_MG2 >> 8,
+        TAP_QUIET_MG2 & 0xFF, TAP_QUIET_MG2 >> 8,
+        0x02,
+    };
+    write_cal(first);
+    if (!imu_command(QMI_CMD_CONFIGURE_TAP)) {
+        return false;
+    }
+    write_cal(second);
+    return imu_command(QMI_CMD_CONFIGURE_TAP);
+}
 
 esp_err_t board_imu_init(void)
 {
@@ -241,12 +323,33 @@ esp_err_t board_imu_init(void)
         return ESP_ERR_NOT_FOUND;
     }
     board_reg_write(s_imu, QMI_CTRL1, 0x40);   /* address auto-increment */
+    board_reg_write(s_imu, QMI_CTRL7, 0x00);   /* sensors off while configuring */
+    board_reg_write(s_imu, QMI_CTRL8, QMI_CTRL8_HANDSHAKE);
     board_reg_write(s_imu, QMI_CTRL2, QMI_ACC_CFG);
     board_reg_write(s_imu, QMI_CTRL3, QMI_GYR_CFG);
     board_reg_write(s_imu, QMI_CTRL5, QMI_LPF_CFG);
+    s_tap_hw = tap_configure();
     board_reg_write(s_imu, QMI_CTRL7, QMI_EN_ACC); /* gyro only while wrist flick is on */
+    if (s_tap_hw) {
+        board_reg_write(s_imu, QMI_CTRL8, QMI_CTRL8_HANDSHAKE | QMI_CTRL8_TAP);
+    }
+    ESP_LOGI(TAG, "QMI8658 ready, hardware tap detector %s", s_tap_hw ? "on" : "unavailable");
     s_imu_ok = true;
     return ESP_OK;
+}
+
+bool board_imu_has_tap(void) { return s_tap_hw; }
+
+int board_imu_poll_tap(void)
+{
+    uint8_t st = 0, tap = 0;
+    if (!s_tap_hw || board_reg_read(s_imu, QMI_STATUS1, &st, 1) != ESP_OK || !(st & QMI_STATUS1_TAP)) {
+        return 0;
+    }
+    if (board_reg_read(s_imu, QMI_TAP_STATUS, &tap, 1) != ESP_OK) {
+        return 0;
+    }
+    return tap & QMI_TAP_TYPE_MASK; /* 1 single, 2 double */
 }
 
 void board_imu_gyro(bool on)

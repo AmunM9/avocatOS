@@ -111,7 +111,7 @@ int avo_batt_percent_from_mv(int millivolts);
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 
-#define AVO_SETTINGS_VERSION 2
+#define AVO_SETTINGS_VERSION 3
 #define AVO_WIFI_SSID_MAX 33
 #define AVO_WIFI_PASS_MAX 65
 
@@ -142,16 +142,19 @@ typedef struct {
     bool wrist_flick;
     bool weather;              /* fetch the forecast over Wi-Fi          */
     uint16_t step_goal;        /* 1000..50000                            */
+    /* ---- version 3 */
+    bool artwork;              /* album covers over Wi-Fi (iTunes)       */
 } avo_settings_t;
 
-/* Size of a stored version 1 blob (every field before `volume`). */
+/* Sizes of stored older blobs (every field before the first new one). */
 #define AVO_SETTINGS_V1_SIZE ((offsetof(avo_settings_t, volume) + 1u) & ~1u)
+#define AVO_SETTINGS_V2_SIZE ((offsetof(avo_settings_t, artwork) + 1u) & ~1u)
 
 void avo_settings_defaults(avo_settings_t *s);
 /* Clamp every field into its valid range. Returns true if anything changed. */
 bool avo_settings_sanitize(avo_settings_t *s, uint8_t face_count);
 /* Accept a blob of `loaded_len` bytes read into `s`: the current version,
- * or a version 1 blob whose new fields get their defaults. */
+ * or an older (shorter) blob whose new fields get their defaults. */
 bool avo_settings_upgrade(avo_settings_t *s, size_t loaded_len);
 
 /* ------------------------------------------------------------------ */
@@ -361,6 +364,8 @@ typedef struct {
  * and back from a still wrist) completed. */
 bool avo_flick_feed(avo_flick_t *f, const float g[3]);
 
+#define AVO_STEPS_WIN 128      /* 2.56 s at 50 Hz for the walk detector */
+
 typedef struct {
     uint32_t n;
     float lp;                 /* smoothed acceleration magnitude         */
@@ -370,12 +375,41 @@ typedef struct {
     uint32_t last_step_at;
     uint8_t pending;          /* regular steps waiting to be confirmed   */
     bool counting;
+    uint16_t gaps[6];         /* last intervals between steps (samples)  */
+    uint8_t ngaps;
+    /* walk detection: energy + periodicity (normalized autocorrelation) */
+    float buf[AVO_STEPS_WIN];
+    uint16_t head, filled;
+    bool walking;
 } avo_steps_t;
 
 void avo_steps_reset(avo_steps_t *s);
 /* Accelerometer sample in g. Returns steps to add now (0 most of the time;
- * the steps held back while checking the rhythm are released together). */
+ * the steps held back while checking the rhythm are released together).
+ * Steps only count while the motion is both strong and periodic, which
+ * rejects desk work (typing, mouse, gestures). */
 uint32_t avo_steps_feed(avo_steps_t *s, const float a[3]);
+/* Periodicity of a window: best normalized autocorrelation for lags
+ * [min_lag, max_lag] (samples). 0 for silence. */
+float avo_autocorr_peak(const float *x, int n, int min_lag, int max_lag, int *best_lag);
+
+/* Raise to wake: the wrist turns the screen towards the face (the gravity
+ * direction changes by >= 35 deg within a second) and then holds still with
+ * the screen facing up. Works whichever way the sensor's z axis points. */
+#define AVO_RAISE_HZ 25
+#define AVO_RAISE_HIST 25        /* one second of gravity directions */
+
+typedef struct {
+    float g[3];                  /* low-passed gravity                 */
+    float hist[AVO_RAISE_HIST][3];
+    uint8_t head, filled;
+    uint8_t steady;
+    uint16_t cooldown;
+    bool primed;
+} avo_raise_t;
+
+/* Accelerometer sample in g at AVO_RAISE_HZ. True once per raise. */
+bool avo_raise_feed(avo_raise_t *r, const float a[3]);
 
 /* ------------------------------------------------------------------ */
 /* Daily activity: steps, exercise minutes, stand hours                */

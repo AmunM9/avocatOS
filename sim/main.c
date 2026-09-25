@@ -171,6 +171,9 @@ static void motion_checks(void)
     bool snoozed = false;
     avo_alarms_next_text(hm, sizeof hm, &snoozed);
     check("doble toque pospone la alarma", !avo_overlay_active() && snoozed && sim_last_sound() < 0);
+    check("posponer muestra el aviso breve", lv_obj_get_child_count(lv_layer_top()) > 0);
+    run_ms(3000);
+    check("el aviso breve desaparece solo", lv_obj_get_child_count(lv_layer_top()) == 0);
     check("una alarma de una vez se desactiva sola", !al->list[saved].enabled);
     al->count = saved;
     avo_alarms_commit();
@@ -241,6 +244,12 @@ static void tour(const char *dir, const char *suffix)
     avo_notif_open_detail(103);     SHOT("notification_detail");
     avo_nav_face(); run_ms(400);
     avo_nav_app(&AVO_APP_MUSIC);    SHOT("music");
+    sim_set_artwork(true);          run_ms(400); SHOT("music_cover");
+    sim_set_long_track();           run_ms(300); SHOT("music_long_cover");
+    run_ms(2500);                   SHOT("music_long_scrolled");
+    sim_set_artwork(false);         run_ms(400); SHOT("music_long_text");
+    avo_settings()->artwork = false; sim_set_artwork(true); run_ms(400); SHOT("music_covers_off");
+    avo_settings()->artwork = true; sim_set_artwork(false);
     avo_nav_app(&AVO_APP_SETTINGS); SHOT("settings");
     avo_nav_face(); run_ms(400);
     sim_phone_push(false);          run_ms(400); write_frame(dir, "banner");

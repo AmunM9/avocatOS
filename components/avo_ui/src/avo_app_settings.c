@@ -424,6 +424,8 @@ static void settings_build(lv_obj_t *scr)
         snprintf(vol, sizeof vol, "%u %%", avo_settings()->volume);
     }
     nav_row(page, AVO_HUE_EMBER, LV_SYMBOL_BELL, "Sonido", vol, avo_settings_sound_page);
+    nav_row(page, AVO_HUE_ROSE, LV_SYMBOL_AUDIO, "Música", avo_settings()->artwork ? "Portadas" : "Sin portadas",
+            avo_settings_music_page);
     nav_row(page, AVO_HUE_MINT, AVO_SYM_TAP, "Gestos", NULL, avo_settings_gestures_page);
 
     avo_section(page, "General");

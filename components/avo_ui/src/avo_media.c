@@ -1,8 +1,11 @@
 /*
  * Now Playing: shared by the Música app and the page under the Control
- * Center. Controls the iPhone's player through AMS. AMS carries no artwork,
- * so the cover is the album art fetched over Wi-Fi when available, else a
- * gradient generated from the track so every song keeps its own colour.
+ * Center. Controls the iPhone's player through AMS. AMS carries no artwork:
+ * the cover is the album art fetched over Wi-Fi. Without one (covers off in
+ * Ajustes, no Wi-Fi, not found) the page shows no placeholder: the text
+ * takes the full width. Source, title and artist are one line each; a title
+ * or artist that does not fit scrolls, like the iPhone's player, so the
+ * layout never jumps.
  */
 #include <stdio.h>
 #include <string.h>
@@ -36,43 +39,93 @@ bool avo_media_recent(void)
 
 /* ================================================================= widget */
 
+#define COVER 132
+#define INFO_H COVER            /* the text block keeps the cover's height */
+#define CONTROLS_Y 150
+
+typedef enum { LAYOUT_NONE, LAYOUT_COVER, LAYOUT_TEXT, LAYOUT_MESSAGE } layout_t;
+
 typedef struct {
-    lv_obj_t *root, *cover, *cover_img, *cover_glyph, *title, *artist, *source, *play, *vol_bar;
+    lv_obj_t *root, *cover, *cover_img, *info, *title, *artist, *source, *play, *vol_bar;
     lv_timer_t *timer;
     uint32_t version, art_version;
     bool had_art;
+    layout_t layout;
     lv_image_dsc_t art;
 } np_t;
 
-static uint32_t hash_str(const char *a, const char *b)
+#define MARQUEE_PX_PER_S 38
+#define MARQUEE_START_MS 1500   /* read the beginning first               */
+#define MARQUEE_PAUSE_MS 2000   /* rest at the start between loops         */
+
+/* Scrolling of long titles: still at first, then a slow loop, then a rest,
+ * like the iPhone's Now Playing. */
+static void marquee(lv_obj_t *label)
 {
-    uint32_t h = 2166136261u; /* FNV-1a */
-    for (const char *p = a; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
-    for (const char *p = b; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
-    return h;
+    static lv_anim_t tpl;
+    static bool ready;
+    if (!ready) {
+        lv_anim_init(&tpl);
+        tpl.act_time = -MARQUEE_START_MS; /* negative act_time = initial delay */
+        tpl.repeat_cnt = LV_ANIM_REPEAT_INFINITE;
+        tpl.repeat_delay = MARQUEE_PAUSE_MS;
+        ready = true;
+    }
+    lv_obj_set_style_anim(label, &tpl, 0);
+    lv_obj_set_style_anim_duration(label, lv_anim_speed(MARQUEE_PX_PER_S), 0);
 }
 
-static void paint_generated_cover(np_t *np, const avo_media_t *m)
+/* Set text only when it changed: re-setting restarts the scrolling. */
+static void set_text(lv_obj_t *label, const char *text)
 {
-    static const avo_hue_t hues[] = { AVO_HUE_ROSE, AVO_HUE_IRIS, AVO_HUE_SKY, AVO_HUE_MINT, AVO_HUE_SOLAR, AVO_HUE_EMBER };
-    uint32_t h = hash_str(m->title, m->artist);
-    lv_color_t top, bottom;
-    if (avo_theme_is_avocado()) {
-        static const uint32_t avo[][2] = { { 0xE4EEAB, 0x7CB342 }, { 0x9ACD4B, 0x2B461C }, { 0xC9D98A, 0x7A4A29 } };
-        const uint32_t *c = avo[h % 3];
-        top = lv_color_hex(c[0]);
-        bottom = lv_color_hex(c[1]);
-    } else {
-        lv_color_t unused;
-        avo_hue_t a = hues[h % 6];
-        avo_hue_t b = hues[(h >> 8) % 6] == a ? hues[(h % 6 + 2) % 6] : hues[(h >> 8) % 6];
-        avo_hue_grad(a, &top, &unused);
-        avo_hue_grad(b, &unused, &bottom);
+    if (strcmp(lv_label_get_text(label), text) != 0) {
+        lv_label_set_text(label, text);
     }
-    lv_obj_set_style_bg_color(np->cover, top, 0);
-    lv_obj_set_style_bg_grad_color(np->cover, bottom, 0);
-    lv_obj_add_flag(np->cover_img, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(np->cover_glyph, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void one_line(lv_obj_t *label, lv_label_long_mode_t mode, lv_text_align_t align)
+{
+    lv_label_set_long_mode(label, mode);
+    lv_obj_set_width(label, lv_pct(100));
+    lv_obj_set_height(label, LV_SIZE_CONTENT);
+    lv_obj_set_style_max_height(label, LV_COORD_MAX, 0);
+    lv_obj_set_style_text_align(label, align, 0);
+    if (mode == LV_LABEL_LONG_MODE_SCROLL_CIRCULAR) {
+        marquee(label);
+    }
+}
+
+static void apply_layout(np_t *np, layout_t layout)
+{
+    if (layout == np->layout) {
+        return;
+    }
+    np->layout = layout;
+    bool cover = layout == LAYOUT_COVER;
+    int32_t x = cover ? AVO_PAD + 6 + COVER + 14 : AVO_PAD + 6;
+    lv_obj_set_pos(np->info, x, 0);
+    lv_obj_set_size(np->info, AVO_W - x - AVO_PAD - 6, INFO_H);
+    if (cover) {
+        lv_obj_remove_flag(np->cover, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(np->cover, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_text_align_t align = cover ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER;
+    lv_obj_set_style_text_font(np->title, cover ? &avo_font_26 : &avo_font_30, 0);
+    one_line(np->source, LV_LABEL_LONG_MODE_DOTS, align);
+    one_line(np->title, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR, align);
+    if (layout == LAYOUT_MESSAGE) {
+        /* "Sin iPhone": a sentence reads better wrapped than scrolling */
+        one_line(np->artist, LV_LABEL_LONG_MODE_DOTS, align);
+        lv_obj_set_style_max_height(np->artist, 84, 0);
+    } else {
+        one_line(np->artist, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR, align);
+    }
+}
+
+static bool show_cover(const avo_artwork_t *art, bool has_art)
+{
+    return has_art && art->pixels && avo_settings()->artwork;
 }
 
 static void refresh(np_t *np, bool force)
@@ -80,23 +133,25 @@ static void refresh(np_t *np, bool force)
     avo_media_t m;
     avo_hal_media(&m);
     avo_artwork_t art;
-    bool has_art = avo_hal_artwork(&art) && art.pixels;
+    bool has_art = avo_hal_artwork(&art);
+    has_art = show_cover(&art, has_art);
     if (!force && m.version == np->version && has_art == np->had_art && (!has_art || art.version == np->art_version)) {
         return;
     }
     np->version = m.version;
     np->had_art = has_art;
     if (!m.available) {
-        lv_label_set_text(np->title, "Sin iPhone");
-        lv_label_set_text(np->artist, "Empareja tu iPhone en Ajustes › Bluetooth para controlar su música.");
-        lv_label_set_text(np->source, "");
-        paint_generated_cover(np, &m);
+        apply_layout(np, LAYOUT_MESSAGE);
+        set_text(np->source, "");
+        set_text(np->title, "Sin iPhone");
+        set_text(np->artist, "Empareja tu iPhone en Ajustes › Bluetooth para controlar su música.");
         return;
     }
-    lv_label_set_text(np->title, m.title[0] ? m.title : "Nada sonando");
-    lv_label_set_text(np->artist, m.artist);
-    lv_label_set_text(np->source, m.app[0] ? m.app : "iPhone");
-    lv_label_set_text(lv_obj_get_child(np->play, 0), m.playing ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
+    apply_layout(np, has_art ? LAYOUT_COVER : LAYOUT_TEXT);
+    set_text(np->title, m.title[0] ? m.title : "Nada sonando");
+    set_text(np->artist, m.artist);
+    set_text(np->source, m.app[0] ? m.app : "iPhone");
+    set_text(lv_obj_get_child(np->play, 0), m.playing ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
     lv_bar_set_value(np->vol_bar, m.volume, LV_ANIM_ON);
     if (has_art) {
         np->art_version = art.version;
@@ -108,10 +163,6 @@ static void refresh(np_t *np, bool force)
         };
         lv_image_set_src(np->cover_img, &np->art);
         lv_obj_invalidate(np->cover_img); /* the buffer may be reused with new pixels */
-        lv_obj_remove_flag(np->cover_img, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(np->cover_glyph, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        paint_generated_cover(np, &m);
     }
 }
 
@@ -163,44 +214,35 @@ lv_obj_t *avo_now_playing_create(lv_obj_t *parent, int32_t top)
     lv_obj_remove_flag(np->root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(np->root, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
-    /* cover (artwork or generated) + track info on its right */
+    /* cover (album art only; hidden when there is none) */
     np->cover = lv_obj_create(np->root);
     lv_obj_remove_style_all(np->cover);
-    lv_obj_set_size(np->cover, 132, 132);
+    lv_obj_set_size(np->cover, COVER, COVER);
     lv_obj_set_pos(np->cover, AVO_PAD + 6, 0);
     lv_obj_set_style_radius(np->cover, 24, 0);
     lv_obj_set_style_clip_corner(np->cover, true, 0);
     lv_obj_set_style_bg_opa(np->cover, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_grad_dir(np->cover, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_color(np->cover, p->surface, 0);
     lv_obj_remove_flag(np->cover, LV_OBJ_FLAG_CLICKABLE);
-    np->cover_glyph = avo_label(np->cover, &avo_font_40, lv_color_white(), LV_SYMBOL_AUDIO);
-    lv_obj_center(np->cover_glyph);
     np->cover_img = lv_image_create(np->cover);
-    lv_obj_set_size(np->cover_img, 132, 132);
+    lv_obj_set_size(np->cover_img, COVER, COVER);
     lv_image_set_inner_align(np->cover_img, LV_IMAGE_ALIGN_STRETCH);
-    lv_obj_add_flag(np->cover_img, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_t *info = lv_obj_create(np->root);
-    lv_obj_remove_style_all(info);
-    lv_obj_set_size(info, AVO_W - 2 * AVO_PAD - 132 - 20, 132);
-    lv_obj_set_pos(info, AVO_PAD + 6 + 132 + 14, 0);
-    lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(info, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_row(info, 4, 0);
-    lv_obj_remove_flag(info, LV_OBJ_FLAG_CLICKABLE);
-    np->source = avo_label(info, &avo_font_22, p->label2, "");
-    np->title = avo_label(info, &avo_font_26, p->label, "");
-    lv_obj_set_size(np->title, lv_pct(100), 62); /* two lines, then "…" */
-    lv_label_set_long_mode(np->title, LV_LABEL_LONG_MODE_DOTS);
-    np->artist = avo_label(info, &avo_font_22, p->label2, "");
-    lv_obj_set_width(np->artist, lv_pct(100));
-    lv_obj_set_style_max_height(np->artist, 56, 0);
-    lv_label_set_long_mode(np->artist, LV_LABEL_LONG_MODE_DOTS);
+    /* track info: three single lines, vertically centred on the cover */
+    np->info = lv_obj_create(np->root);
+    lv_obj_remove_style_all(np->info);
+    lv_obj_set_flex_flow(np->info, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(np->info, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(np->info, 6, 0);
+    lv_obj_remove_flag(np->info, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    np->source = avo_label(np->info, &avo_font_22, p->label2, "");
+    np->title = avo_label(np->info, &avo_font_26, p->label, "");
+    np->artist = avo_label(np->info, &avo_font_22, p->label2, "");
 
     lv_obj_t *row = lv_obj_create(np->root);
     lv_obj_remove_style_all(row);
     lv_obj_set_size(row, AVO_W - 2 * AVO_PAD, 116);
-    lv_obj_set_pos(row, AVO_PAD, 150);
+    lv_obj_set_pos(row, AVO_PAD, CONTROLS_Y);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(row, LV_OBJ_FLAG_GESTURE_BUBBLE);

@@ -18,8 +18,8 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Esfera Flux | Modular | Cronógrafo | Apps (panal) |
 |---|---|---|---|
 | ![](docs/screenshots/face-flux.png) | ![](docs/screenshots/face-modular.png) | ![](docs/screenshots/face-chrono.png) | ![](docs/screenshots/app-grid.png) |
-| **Centro de control** | **Reproduciendo** | **Notificaciones** | **Detalle** |
-| ![](docs/screenshots/control-center.png) | ![](docs/screenshots/now-playing.png) | ![](docs/screenshots/notifications.png) | ![](docs/screenshots/notification-detail.png) |
+| **Centro de control** | **Reproduciendo** | **Sin portada** | **Notificaciones** |
+| ![](docs/screenshots/control-center.png) | ![](docs/screenshots/now-playing.png) | ![](docs/screenshots/now-playing-text.png) | ![](docs/screenshots/notifications.png) |
 | **Smart Stack** | **Ajustes** | **Aviso** | **Llamada entrante** |
 | ![](docs/screenshots/smart-stack.png) | ![](docs/screenshots/settings.png) | ![](docs/screenshots/banner.png) | ![](docs/screenshots/incoming-call.png) |
 | **Actividad** | **Tiempo** | **Alarmas** | **Editar alarma** |
@@ -35,13 +35,13 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 |---|---|
 | Esferas | Flux (dígitos con degradado), Modular (batería, pasos, tiempo y próxima alarma), Cronógrafo (analógica) y Hass (solo en Modo Avocado) |
 | Apps | Cuadrícula en panal con efecto lupa: Ajustes, Música, Actividad, Tiempo, Alarmas, Cronómetro, Temporizador, Linterna, Nivel, Esferas |
-| Actividad | Podómetro con el acelerómetro y tres anillos: pasos (meta configurable), minutos de ejercicio y horas de pie |
+| Actividad | Podómetro y tres anillos: pasos (meta configurable), minutos de ejercicio y horas de pie. Solo cuenta cuando el movimiento es fuerte, periódico (autocorrelación) y de ritmo regular, así que el trabajo de escritorio no suma pasos |
 | Tiempo | Pronóstico de [Open-Meteo](https://open-meteo.com) por Wi-Fi, sin cuenta ni clave; ubicación aproximada por IP con [ipwho.is](https://ipwho.is) |
 | Alarmas | Hasta 8, con días de la semana; posponer 9 min; suenan también con la pantalla apagada |
 | Sonido | Altavoz ES8311: sonidos sintetizados (clic, aviso, cargador, alarma, temporizador, llamada) y volumen |
-| Gestos de muñeca | Doble toque en la caja y giro rápido de muñeca, detectados con el sensor de movimiento |
+| Gestos de muñeca | Doble toque (detector de toques por hardware del QMI8658), giro rápido de muñeca y levantar la muñeca para encender la pantalla |
 | iPhone | Notificaciones con acciones (ANCS), llamadas entrantes (aceptar/rechazar), control de música y volumen (AMS), hora del teléfono (CTS) |
-| Música | Página *Reproduciendo* bajo el Centro de control, con carátula descargada por Wi-Fi |
+| Música | Página *Reproduciendo* bajo el Centro de control. Portada descargada por Wi-Fi (se puede desactivar en *Ajustes › Música*); sin portada, el texto ocupa todo el ancho. Títulos largos en una línea que se desplaza |
 | Sistema | Centro de control, Smart Stack, pantalla siempre activa (anti-quemado), animación de carga, levantar la muñeca para activar |
 | Ajustes | Bluetooth (emparejar/olvidar iPhone), Wi-Fi (buscar, contraseña, NTP), Pantalla, Apariencia, Hora, Información, Desarrollador (FPS) |
 | Texto | Inter para el texto, Noto Emoji monocromo como respaldo para los emojis de las notificaciones (sin compresión RLE, ver [lvgl/lvgl#10293](https://github.com/lvgl/lvgl/issues/10293)) |
@@ -58,7 +58,8 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Notificaciones | ↑ desde el borde inferior o → | Volver a la esfera (desplazar la lista nunca la cierra) |
 | Botón **BOOT** | pulsar | Esfera ↔ apps (doble pulsación: última app) |
 | Botón **PWR** | pulsar / mantener | Centro de control (dentro, ↑ = Reproduciendo) / dormir |
-| Muñeca | doble toque en la caja | Contestar llamada, posponer alarma, detener temporizador, abrir aviso o pausar la música |
+| Muñeca | doble toque en el borde o en una zona sin botones | Contestar llamada, posponer alarma, detener temporizador, abrir aviso o pausar la música |
+| Muñeca | levantarla para mirar | Encender la pantalla |
 | Muñeca | giro rápido hacia fuera y vuelta | Descartar aviso, silenciar llamada, volver a la esfera |
 
 ## Hardware
@@ -139,4 +140,5 @@ El BSP oficial usa QSPI a 40 MHz y un único buffer de 20 líneas en PSRAM. avoc
 - **Fuentes:** Inter, Nunito y Noto Emoji, con licencia SIL OFL 1.1 (ver `assets/fonts/OFL-*.txt`).
 - **Símbolos:** FontAwesome 5 Free, incluidos con LVGL.
 - **Dependencias:** LVGL (MIT); esp_lvgl_port, esp_lcd_sh8601, esp_jpeg y esp_codec_dev (Apache 2.0).
+- La configuración del detector de toques del QMI8658 sigue la de [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT).
 - La marca de aguacate la dibuja `tools/gen_assets.py`.

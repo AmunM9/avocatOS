@@ -36,7 +36,11 @@ void avo_alarms_commit(void)
     avo_hal_alarms_save(&s_alarms);
 }
 
-static void alarm_stop(void) { s_snooze.active = false; }
+static void alarm_stop(void)
+{
+    s_snooze.active = false;
+    avo_toast(AVO_SYM_CLOCK, "Alarma detenida");
+}
 
 static void alarm_snooze(void)
 {
@@ -44,6 +48,11 @@ static void alarm_snooze(void)
     s_snooze.until_ms = avo_hal_millis() + SNOOZE_MS;
     s_snooze.hour = s_ringing_hour;
     s_snooze.min = s_ringing_min;
+    char hm[12], msg[48];
+    bool snoozed;
+    avo_alarms_next_text(hm, sizeof hm, &snoozed);
+    snprintf(msg, sizeof msg, "Pospuesta %u min · suena %s", SNOOZE_MS / 60000u, hm);
+    avo_toast(AVO_SYM_CLOCK, msg);
 }
 
 static void ring(uint8_t hour, uint8_t min, const char *cap)

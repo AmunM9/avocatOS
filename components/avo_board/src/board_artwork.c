@@ -108,6 +108,16 @@ static void artwork_task(void *arg)
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(POLL_MS));
         board_weather_step(); /* same task: never two TLS sessions at once */
+        const avo_settings_t *cfg = board_settings_cache();
+        if (cfg && !cfg->artwork) {
+            /* covers off: nothing is sent to iTunes, and none is shown */
+            if (s_front != -1) {
+                s_front = -1;
+                s_version++;
+            }
+            done_key[0] = seen_key[0] = '\0'; /* fetch again if turned back on */
+            continue;
+        }
         avo_media_t m;
         avo_hal_media(&m);
         char key[130];

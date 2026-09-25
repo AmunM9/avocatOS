@@ -117,6 +117,8 @@ void avo_overlay_alert(const avo_alert_t *a);
 bool avo_overlay_keeps_awake(void);        /* call or alert on screen          */
 bool avo_overlay_double_tap(void);         /* main action; false if nothing    */
 bool avo_overlay_flick(void);              /* dismiss; false if nothing        */
+/* Short confirmation pill at the top ("Alarma pospuesta…"), ~2 s. */
+void avo_toast(const char *symbol, const char *text);
 /* ---------------------------------------------------------------- faces */
 #define AVO_FACE_MAX 4
 int avo_faces_count(void);                   /* depends on theme            */

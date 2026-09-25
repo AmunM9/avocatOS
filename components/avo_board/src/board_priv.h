@@ -60,6 +60,9 @@ void board_rtc_store(time_t utc);
 esp_err_t board_imu_init(void);
 bool board_imu_read6(float a[3], float g[3]);
 void board_imu_gyro(bool on);
+/* Hardware tap detector: 0 none, 1 single, 2 double since the last call. */
+bool board_imu_has_tap(void);
+int board_imu_poll_tap(void);
 
 /* 100 Hz motion processing (steps, double tap, wrist flick, wrist raise),
  * called from the input task, which has an internal-RAM stack and may

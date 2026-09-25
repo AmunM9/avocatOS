@@ -286,4 +286,29 @@ bool avo_hal_media_command(uint8_t cmd)
     return true;
 }
 
-bool avo_hal_artwork(avo_artwork_t *out) { (void)out; return false; }
+static bool s_art_on;
+
+void sim_set_artwork(bool on) { s_art_on = on; }
+
+/* A fake 132x132 cover (diagonal gradient) so the cover layout can be seen. */
+bool avo_hal_artwork(avo_artwork_t *out)
+{
+    static uint16_t px[132 * 132];
+    if (!s_art_on || !s_media.available) return false;
+    if (!px[0]) {
+        for (int y = 0; y < 132; y++)
+            for (int x = 0; x < 132; x++) {
+                int r = 31 - (x + y) * 12 / 264, g = 10 + y * 20 / 132, b = 8 + x * 20 / 132;
+                px[y * 132 + x] = (uint16_t)((r << 11) | (g << 5) | b);
+            }
+    }
+    *out = (avo_artwork_t){ .pixels = px, .w = 132, .h = 132, .version = 1 };
+    return true;
+}
+
+void sim_set_long_track(void)
+{
+    snprintf(s_media.title, sizeof s_media.title, "Los Tontos (con Kiko Veneno) - En directo");
+    snprintf(s_media.artist, sizeof s_media.artist, "C. Tangana, Kiko Veneno");
+    s_media.version++;
+}

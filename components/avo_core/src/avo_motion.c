@@ -6,8 +6,9 @@
  * was still before and stays still after (so walking or typing never fires).
  * Wrist flick: a fast turn away and back from a still wrist (watchOS 26).
  * Steps: peaks of the smoothed acceleration magnitude crossing a threshold
- * that follows the last second of motion; four regular steps must happen
- * before counting starts, which rejects isolated shakes.
+ * that follows the last second of motion, counted only while a walk
+ * detector says the motion is strong and periodic.
+ * Raise to wake: see avo_raise_feed().
  */
 #include <math.h>
 #include <string.h>
@@ -150,39 +151,146 @@ bool avo_flick_feed(avo_flick_t *f, const float g[3])
     return false;
 }
 
-/* ---------------------------------------------------------------- steps */
+/* ---------------------------------------------------------------- steps
+ * Windowed peak detection gated by a walk detector, the combination that
+ * worked best for wrist devices in published comparisons: the last 2.56 s
+ * must be strong enough (standard deviation) and periodic at a walking or
+ * running rhythm (normalized autocorrelation), otherwise no step counts.
+ * Desk work produces jolts, but not a steady rhythm. */
 #define STEP_LP_ALPHA 0.2f      /* ~3.5 Hz low-pass                          */
 #define STEP_WINDOW 100         /* threshold follows the last second         */
-#define STEP_MIN_SPAN 0.12f     /* g peak to peak: less is not walking       */
+#define STEP_MIN_SPAN 0.18f     /* g peak to peak: less is not walking       */
 #define STEP_HYST 0.15f         /* of the span, around the threshold         */
 #define STEP_MIN_GAP 25         /* at most 4 steps per second                */
 #define STEP_MAX_GAP 200        /* a 2 s pause ends the walk                 */
-#define STEP_CONFIRM 4
+#define STEP_CONFIRM 7          /* steps in a row before counting starts     */
+#define STEP_PENDING_MAX 10
+#define STEP_MAX_CV 0.2f        /* interval variation of a real walk         */
+#define WALK_DECIMATE 2         /* detector runs at 50 Hz                    */
+#define WALK_EVERY 50           /* re-evaluated every 0.5 s (input samples)  */
+#define WALK_MIN_STD 0.07f      /* g                                         */
+#define WALK_MIN_CORR 0.5f
+#define WALK_MIN_LAG 15         /* 0.3 s: fastest step                       */
+#define WALK_MAX_LAG 65         /* 1.3 s: slowest stride (two steps)         */
 
 void avo_steps_reset(avo_steps_t *s)
 {
     memset(s, 0, sizeof *s);
 }
 
+float avo_autocorr_peak(const float *x, int n, int min_lag, int max_lag, int *best_lag)
+{
+    float mean = 0;
+    for (int i = 0; i < n; i++) mean += x[i];
+    mean /= (float)n;
+    float best = 0;
+    *best_lag = 0;
+    for (int k = min_lag; k <= max_lag && k < n; k++) {
+        float num = 0, e0 = 0, e1 = 0;
+        for (int i = 0; i + k < n; i++) {
+            float a = x[i] - mean, b = x[i + k] - mean;
+            num += a * b;
+            e0 += a * a;
+            e1 += b * b;
+        }
+        if (e0 <= 1e-9f || e1 <= 1e-9f) {
+            continue;
+        }
+        float r = num / sqrtf(e0 * e1);
+        if (r > best) {
+            best = r;
+            *best_lag = k;
+        }
+    }
+    return best;
+}
+
+static void walk_update(avo_steps_t *s)
+{
+    if (s->filled < AVO_STEPS_WIN) {
+        s->walking = false;
+        return;
+    }
+    float ordered[AVO_STEPS_WIN], mean = 0, var = 0;
+    for (int i = 0; i < AVO_STEPS_WIN; i++) {
+        ordered[i] = s->buf[(s->head + i) % AVO_STEPS_WIN]; /* oldest first */
+        mean += ordered[i];
+    }
+    mean /= AVO_STEPS_WIN;
+    for (int i = 0; i < AVO_STEPS_WIN; i++) var += (ordered[i] - mean) * (ordered[i] - mean);
+    float std = sqrtf(var / AVO_STEPS_WIN);
+    int lag;
+    s->walking = std >= WALK_MIN_STD &&
+                 avo_autocorr_peak(ordered, AVO_STEPS_WIN, WALK_MIN_LAG, WALK_MAX_LAG, &lag) >= WALK_MIN_CORR;
+}
+
+#define GAPS_N 6
+
+static void push_gap(avo_steps_t *s, uint32_t gap)
+{
+    memmove(&s->gaps[1], &s->gaps[0], (GAPS_N - 1) * sizeof s->gaps[0]);
+    s->gaps[0] = (uint16_t)gap;
+    if (s->ngaps < GAPS_N) s->ngaps++;
+}
+
+static float mean_gap(const avo_steps_t *s)
+{
+    float m = 0;
+    for (int i = 0; i < s->ngaps; i++) m += s->gaps[i];
+    return s->ngaps ? m / s->ngaps : 0;
+}
+
+/* Walking has a steady rhythm: the last intervals vary by < STEP_MAX_CV. */
+static bool regular(const avo_steps_t *s)
+{
+    if (s->ngaps < GAPS_N) {
+        return false;
+    }
+    float m = mean_gap(s), v = 0;
+    for (int i = 0; i < GAPS_N; i++) v += (s->gaps[i] - m) * (s->gaps[i] - m);
+    return sqrtf(v / GAPS_N) < STEP_MAX_CV * m;
+}
+
+static void restart_walk(avo_steps_t *s)
+{
+    s->counting = false;
+    s->pending = 1;
+    s->ngaps = 0;
+}
+
 static uint32_t step_candidate(avo_steps_t *s)
 {
+    bool first = s->last_step_at == 0;
     uint32_t gap = s->n - s->last_step_at;
-    if (s->last_step_at != 0 && gap < STEP_MIN_GAP) {
+    if (!first && gap < STEP_MIN_GAP) {
         return 0; /* too soon: same step */
     }
-    uint32_t add = 0;
-    if (s->last_step_at == 0 || gap > STEP_MAX_GAP) {
-        s->counting = false;
-        s->pending = 1;
-    } else if (s->counting) {
-        add = 1;
-    } else if (++s->pending >= STEP_CONFIRM) {
-        s->counting = true;
-        add = s->pending;
-        s->pending = 0;
-    }
     s->last_step_at = s->n;
-    return add;
+    if (first || gap > STEP_MAX_GAP) {
+        restart_walk(s);
+        return 0;
+    }
+    if (s->counting) {
+        float m = mean_gap(s);
+        push_gap(s, gap);
+        if (s->walking && gap > m * 0.6f && gap < m * 1.6f) {
+            return 1;
+        }
+        restart_walk(s); /* rhythm broken: confirm again */
+        push_gap(s, gap);
+        return 0;
+    }
+    push_gap(s, gap);
+    if (s->pending < STEP_PENDING_MAX) {
+        s->pending++;
+    }
+    if (s->walking && s->pending >= STEP_CONFIRM && regular(s)) {
+        uint32_t add = s->pending; /* the steps held back while checking */
+        s->counting = true;
+        s->pending = 0;
+        return add;
+    }
+    return 0;
 }
 
 uint32_t avo_steps_feed(avo_steps_t *s, const float a[3])
@@ -193,6 +301,14 @@ uint32_t avo_steps_feed(avo_steps_t *s, const float a[3])
     }
     s->n++;
     s->lp += STEP_LP_ALPHA * (m - s->lp);
+    if (s->n % WALK_DECIMATE == 0) {
+        s->buf[s->head] = s->lp;
+        s->head = (uint16_t)((s->head + 1) % AVO_STEPS_WIN);
+        if (s->filled < AVO_STEPS_WIN) s->filled++;
+    }
+    if (s->n % WALK_EVERY == 0) {
+        walk_update(s);
+    }
     if (s->lp > s->win_max) s->win_max = s->lp;
     if (s->lp < s->win_min) s->win_min = s->lp;
     if (s->n % STEP_WINDOW == 0) {
@@ -212,4 +328,51 @@ uint32_t avo_steps_feed(avo_steps_t *s, const float a[3])
         return step_candidate(s);
     }
     return 0;
+}
+
+/* ---------------------------------------------------------------- raise to wake */
+#define RAISE_LP 0.35f          /* gravity low-pass at 25 Hz                  */
+#define RAISE_VIEW_COS 0.6f     /* screen within 53 deg of facing up          */
+#define RAISE_TURN_COS 0.819f   /* turned >= 35 deg ...                       */
+#define RAISE_TURN_FROM 10      /* ... compared with 0.4-1.0 s ago            */
+#define RAISE_STEADY 5          /* then 200 ms still                          */
+#define RAISE_STEADY_G 0.12f
+#define RAISE_COOLDOWN 50       /* 2 s                                        */
+
+static float norm3(const float v[3]) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+
+bool avo_raise_feed(avo_raise_t *r, const float a[3])
+{
+    if (!r->primed) {
+        memcpy(r->g, a, sizeof r->g);
+        r->primed = true;
+    }
+    float d[3], mag = norm3(a);
+    for (int k = 0; k < 3; k++) {
+        d[k] = a[k] - r->g[k];
+        r->g[k] += RAISE_LP * d[k];
+    }
+    bool steady = norm3(d) < RAISE_STEADY_G && mag > 0.8f && mag < 1.2f;
+    r->steady = steady ? (uint8_t)(r->steady < 255 ? r->steady + 1 : 255) : 0;
+    float gn = norm3(r->g);
+    float u[3] = { r->g[0] / gn, r->g[1] / gn, r->g[2] / gn };
+    memcpy(r->hist[r->head], u, sizeof u);
+    r->head = (uint8_t)((r->head + 1) % AVO_RAISE_HIST);
+    if (r->filled < AVO_RAISE_HIST) r->filled++;
+    if (r->cooldown) {
+        r->cooldown--;
+        return false;
+    }
+    if (r->filled < AVO_RAISE_HIST || r->steady < RAISE_STEADY || fabsf(u[2]) < RAISE_VIEW_COS) {
+        return false;
+    }
+    /* oldest entries = 1.0 s ago; look back to 0.4 s ago */
+    for (int i = 0; i < AVO_RAISE_HIST - RAISE_TURN_FROM; i++) {
+        const float *h = r->hist[(r->head + i) % AVO_RAISE_HIST];
+        if (u[0] * h[0] + u[1] * h[1] + u[2] * h[2] < RAISE_TURN_COS) {
+            r->cooldown = RAISE_COOLDOWN;
+            return true;
+        }
+    }
+    return false;
 }

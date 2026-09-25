@@ -1,4 +1,5 @@
-/* Ajustes > Sonido and Ajustes > Gestos (with a live test of the gestures). */
+/* Ajustes > Sonido, Ajustes > Música and Ajustes > Gestos (with a live test
+ * of the gestures). */
 #include <stdio.h>
 #include "avo_ui_internal.h"
 #include "avo_settings_pages.h"
@@ -62,6 +63,19 @@ void avo_settings_sound_page(lv_obj_t *scr)
     lv_obj_add_event_cb(r, test_cb, LV_EVENT_CLICKED, NULL);
 }
 
+/* ================================================================= Música */
+
+static void artwork_sw_cb(lv_event_t *e) { commit_bool(e, &avo_settings()->artwork); }
+
+void avo_settings_music_page(lv_obj_t *scr)
+{
+    lv_obj_t *page = avo_subpage_create(scr, "Música", AVO_HUE_ROSE);
+    avo_row_switch(page, AVO_HUE_ROSE, LV_SYMBOL_IMAGE, "Portadas", avo_settings()->artwork, artwork_sw_cb, NULL);
+    avo_note(page, "Muestra la portada del álbum en Reproduciendo. Se busca por Wi-Fi en Apple (iTunes) "
+                   "con el título y el artista. Sin Wi-Fi, o si está desactivado, se muestran solo la "
+                   "canción y los controles.");
+}
+
 /* ================================================================= Gestos */
 
 static struct {
@@ -104,8 +118,8 @@ void avo_settings_gestures_page(lv_obj_t *scr)
 {
     lv_obj_t *page = avo_subpage_create(scr, "Gestos", AVO_HUE_MINT);
     avo_row_switch(page, AVO_HUE_MINT, AVO_SYM_TAP, "Doble toque", avo_settings()->double_tap, tap_sw_cb, NULL);
-    avo_note(page, "Toca dos veces la caja con un dedo, con la muñeca quieta: contesta una llamada, "
-                   "pospone la alarma, detiene el temporizador o pausa la música.");
+    avo_note(page, "Toca dos veces el reloj con un dedo, en el borde o en una zona sin botones: "
+                   "contesta una llamada, pospone la alarma, detiene el temporizador o pausa la música.");
     avo_row_switch(page, AVO_HUE_MINT, AVO_SYM_FLICK, "Giro de muñeca", avo_settings()->wrist_flick, flick_sw_cb, NULL);
     avo_note(page, "Gira la muñeca hacia fuera y vuelve rápido: descarta avisos, silencia una llamada "
                    "y vuelve a la esfera.");

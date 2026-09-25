@@ -223,6 +223,119 @@ static void test_steps_ignore_short_bursts(void)
     CHECK(steps == 0);
 }
 
+/* desk work: irregular jolts (mouse, typing, gestures) and small wobble */
+static uint32_t desk(int seconds)
+{
+    avo_steps_t s;
+    avo_steps_reset(&s);
+    uint32_t steps = 0;
+    int next = 50, pulse = 0;
+    for (int i = 0; i < seconds * AVO_MOTION_HZ; i++) {
+        if (i == next) {
+            pulse = 8;                                   /* 80 ms jolt          */
+            next = i + 25 + (int)((noise(1.0f) + 1.0f) * 55.0f); /* 0.25-1.35 s */
+        }
+        float j = pulse > 0 ? 0.35f : 0.0f;
+        pulse--;
+        float a[3] = { noise(0.04f) + j * 0.5f, 0.1f + noise(0.04f), 0.97f + j + noise(0.04f) };
+        steps += avo_steps_feed(&s, a);
+    }
+    return steps;
+}
+
+/* a real walk is not a perfect sine: cadence drifts and each step differs */
+static void test_steps_walking_irregular(void)
+{
+    avo_steps_t s;
+    avo_steps_reset(&s);
+    uint32_t steps = 0;
+    float phase = 0;
+    int expected = 0;
+    for (int i = 0; i < 60 * AVO_MOTION_HZ; i++) {
+        float hz = 1.8f + 0.12f * sinf(2 * PI * (float)i / (15.0f * AVO_MOTION_HZ)) + noise(0.05f);
+        float before = phase;
+        phase += hz / AVO_MOTION_HZ;
+        expected += (int)phase - (int)before;
+        float amp = 0.3f + 0.08f * sinf(1.3f * phase);
+        float a[3] = { noise(0.05f), 0.2f + noise(0.05f), 0.98f + amp * sinf(2 * PI * phase) + noise(0.05f) };
+        steps += avo_steps_feed(&s, a);
+    }
+    CHECK(steps >= (uint32_t)(expected * 92 / 100) && steps <= (uint32_t)(expected * 104 / 100));
+}
+
+static void test_steps_ignore_desk_work(void)
+{
+    CHECK(desk(120) <= 4); /* two minutes at the desk: (almost) no steps */
+}
+
+static void test_autocorr_peak(void)
+{
+    float x[128];
+    for (int i = 0; i < 128; i++) x[i] = sinf(2 * PI * (float)i / 25.0f);
+    int lag = 0;
+    CHECK(avo_autocorr_peak(x, 128, 15, 65, &lag) > 0.9f);
+    CHECK(lag >= 24 && lag <= 26);
+    for (int i = 0; i < 128; i++) x[i] = noise(1.0f);
+    CHECK(avo_autocorr_peak(x, 128, 15, 65, &lag) < 0.45f);
+    for (int i = 0; i < 128; i++) x[i] = 0.5f;
+    CHECK(avo_autocorr_peak(x, 128, 15, 65, &lag) == 0.0f);
+}
+
+/* ================================================================ raise to wake */
+
+typedef void (*pose_fn)(float t, float g[3]);
+
+static int feed_raise(pose_fn pose, float seconds, float noise_g)
+{
+    avo_raise_t r = { 0 };
+    int fired = 0;
+    for (int i = 0; i < (int)(seconds * AVO_RAISE_HZ); i++) {
+        float g[3];
+        pose((float)i / AVO_RAISE_HZ, g);
+        for (int k = 0; k < 3; k++) g[k] += noise(noise_g);
+        fired += avo_raise_feed(&r, g);
+    }
+    return fired;
+}
+
+static void lerp_pose(const float a[3], const float b[3], float u, float g[3])
+{
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    float n = 0;
+    for (int k = 0; k < 3; k++) { g[k] = a[k] + (b[k] - a[k]) * u; n += g[k] * g[k]; }
+    n = sqrtf(n);
+    for (int k = 0; k < 3; k++) g[k] /= n;
+}
+
+static const float HANGING[3] = { -1, 0, 0 }, FACE_UP[3] = { 0, 0, 1 }, VIEW[3] = { 0, -0.64f, 0.77f };
+static const float FACE_UP_NEG[3] = { 0, 0, -1 }, VIEW_NEG[3] = { 0, 0.64f, -0.77f };
+
+static void arm_down_then_look(float t, float g[3]) { lerp_pose(HANGING, VIEW, (t - 1.0f) / 0.4f, g); }
+static void typing_then_look(float t, float g[3]) { lerp_pose(FACE_UP, VIEW, (t - 1.0f) / 0.3f, g); }
+static void typing_then_look_neg(float t, float g[3]) { lerp_pose(FACE_UP_NEG, VIEW_NEG, (t - 1.0f) / 0.3f, g); }
+static void slow_drift(float t, float g[3]) { lerp_pose(HANGING, VIEW, t / 4.0f, g); }
+static void still_face_up(float t, float g[3]) { (void)t; lerp_pose(FACE_UP, FACE_UP, 0, g); }
+static void arm_down_to_side(float t, float g[3])
+{
+    static const float SIDE[3] = { 0, -1, 0 };
+    lerp_pose(HANGING, SIDE, (t - 1.0f) / 0.4f, g); /* turns, but the screen never faces up */
+}
+
+static void test_raise_detected(void)
+{
+    CHECK(feed_raise(arm_down_then_look, 3.0f, 0.02f) == 1);
+    CHECK(feed_raise(typing_then_look, 3.0f, 0.02f) == 1);
+    CHECK(feed_raise(typing_then_look_neg, 3.0f, 0.02f) == 1); /* z axis the other way */
+}
+
+static void test_raise_ignores_other_motion(void)
+{
+    CHECK(feed_raise(slow_drift, 5.0f, 0.02f) == 0);
+    CHECK(feed_raise(still_face_up, 5.0f, 0.02f) == 0);
+    CHECK(feed_raise(arm_down_to_side, 3.0f, 0.02f) == 0);
+    CHECK(feed_raise(arm_down_then_look, 3.0f, 0.35f) == 0); /* shaking: never steady */
+}
+
 /* ================================================================ activity */
 
 static avo_time_t at(int d, int h, int m)
@@ -412,6 +525,23 @@ static void test_settings_upgrade_from_v1(void)
     CHECK(s.version == AVO_SETTINGS_VERSION);
     CHECK_STR(s.wifi_ssid, "Casa");
     CHECK(s.volume == 70 && s.double_tap && s.wrist_flick && s.weather && s.step_goal == 8000);
+    CHECK(s.artwork);
+}
+
+static void test_settings_upgrade_from_v2(void)
+{
+    avo_settings_t s;
+    avo_settings_defaults(&s);
+    s.version = 2;
+    s.volume = 33;
+    s.step_goal = 6000;
+    s.artwork = false;
+    memset(&s.artwork, 0xAB, sizeof s - offsetof(avo_settings_t, artwork));
+    CHECK(avo_settings_upgrade(&s, AVO_SETTINGS_V2_SIZE));
+    CHECK(s.version == AVO_SETTINGS_VERSION);
+    CHECK(s.volume == 33 && s.step_goal == 6000);
+    CHECK(s.artwork == true);
+    CHECK(AVO_SETTINGS_V1_SIZE < AVO_SETTINGS_V2_SIZE && AVO_SETTINGS_V2_SIZE < sizeof s);
 }
 
 static void test_settings_upgrade_rejects_unknown(void)
@@ -469,6 +599,11 @@ int main(void)
     RUN(test_steps_running);
     RUN(test_steps_ignore_still_and_noise);
     RUN(test_steps_ignore_short_bursts);
+    RUN(test_steps_walking_irregular);
+    RUN(test_steps_ignore_desk_work);
+    RUN(test_autocorr_peak);
+    RUN(test_raise_detected);
+    RUN(test_raise_ignores_other_motion);
     RUN(test_activity_minutes_and_stand);
     RUN(test_activity_resets_at_midnight);
     RUN(test_alarm_due);
@@ -481,6 +616,7 @@ int main(void)
     RUN(test_json_string_escapes);
     RUN(test_wmo_codes);
     RUN(test_settings_upgrade_from_v1);
+    RUN(test_settings_upgrade_from_v2);
     RUN(test_settings_upgrade_rejects_unknown);
     RUN(test_settings_sanitize_v2_fields);
     printf("\n%d passed, %d failed\n", g_passed, g_failed);

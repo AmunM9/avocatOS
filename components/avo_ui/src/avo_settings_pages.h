@@ -16,5 +16,6 @@ void avo_settings_bt_leave(void);
 void avo_settings_wifi_page(lv_obj_t *screen);
 void avo_settings_wifi_leave(void);
 void avo_settings_sound_page(lv_obj_t *screen);
+void avo_settings_music_page(lv_obj_t *screen);
 void avo_settings_gestures_page(lv_obj_t *screen);
 void avo_settings_gestures_leave(void);

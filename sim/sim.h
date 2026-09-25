@@ -15,3 +15,5 @@ void sim_phone_push(bool incoming_call);
 void sim_set_charger(bool on);
 /* Last sound the UI asked for, -1 after a stop. */
 int sim_last_sound(void);
+void sim_set_artwork(bool on);
+void sim_set_long_track(void);

@@ -1,7 +1,8 @@
 /*
- * Motion at 100 Hz from the QMI8658: step counting (always), double tap and
- * wrist flick (only while the screen is on), and wrist raise (while it
- * sleeps). Runs inside the input task, one sample per call.
+ * Motion at 100 Hz from the QMI8658: step counting (always), double tap
+ * (the IMU's hardware tap engine, software fallback) and wrist flick (only
+ * while the screen is on), and wrist raise (while it sleeps). Runs inside the
+ * input task, one sample per call.
  */
 #include <math.h>
 #include <string.h>
@@ -12,16 +13,18 @@
 
 static const char *TAG = "board_motion";
 
-#define RAISE_EVERY 10          /* wrist raise check at 10 Hz            */
-#define RAISE_FACE_UP_G 0.75f
-#define RAISE_TILTED_G 0.35f
-#define RAISE_HOLD_TICKS 2
+#define RAISE_EVERY (AVO_MOTION_HZ / AVO_RAISE_HZ) /* raise detector at 25 Hz */
+#define TAP_POLL_EVERY 2        /* hardware tap status at 50 Hz          */
 #define ROLL_EVERY AVO_MOTION_HZ /* activity bookkeeping once per second */
 #define SAVE_EVERY_S 600        /* persist the day every 10 minutes      */
-#define NVS_KEY_ACTIVITY "activity"
+#define LOG_EVERY_S 60          /* orientation / steps line for tuning   */
+/* "activity" held counts from the first step counter, which also counted
+ * desk work; the new counter starts a clean day. */
+#define NVS_KEY_ACTIVITY "activity2"
 
-static avo_tap_t s_tap;
+static avo_tap_t s_tap;             /* software fallback without the tap engine */
 static avo_flick_t s_flick;
+static avo_raise_t s_raise;
 static avo_steps_t s_steps;
 static avo_activity_t s_act;       /* guarded by s_lock */
 static avo_accel_t s_last;         /* guarded by s_lock */
@@ -54,41 +57,48 @@ static void restore_today(const avo_time_t *now)
     s_restored = true;
 }
 
-/* Screen-up after being tilted away for a moment = wrist raised. */
+/* Wrist raised to look at the screen (only while it sleeps). */
 static void raise_step(const float a[3])
 {
-    static bool was_tilted;
-    static int hold;
     const avo_settings_t *s = board_settings_cache();
-    if (!s || !s->raise_to_wake || avo_ui_is_awake()) {
-        was_tilted = false;
-        hold = 0;
-        return;
-    }
-    if (a[2] < RAISE_TILTED_G) {
-        was_tilted = true;
-        hold = 0;
-    } else if (was_tilted && a[2] > RAISE_FACE_UP_G && fabsf(a[0]) < 0.5f && fabsf(a[1]) < 0.6f) {
-        if (++hold >= RAISE_HOLD_TICKS) {
-            avo_ui_post_wake();
-            was_tilted = false;
-            hold = 0;
-        }
+    bool fired = avo_raise_feed(&s_raise, a); /* always fed, so the history is fresh */
+    if (fired && s && s->raise_to_wake && !avo_ui_is_awake()) {
+        ESP_LOGI(TAG, "wrist raised: wake");
+        avo_ui_post_wake();
     }
 }
 
-static void gestures_step(const avo_settings_t *s, const float a[3], const float g[3])
+static void tap_step(const avo_settings_t *s, const float a[3], bool awake)
 {
-    bool awake = avo_ui_is_awake();
-    if (awake && s->double_tap) {
+    bool want = awake && s->double_tap;
+    if (board_imu_has_tap()) {
+        if (s_n % TAP_POLL_EVERY == 0) {
+            int t = board_imu_poll_tap();
+            if (t) {
+                ESP_LOGI(TAG, "tap: %s%s", t == 2 ? "double" : "single", want ? "" : " (ignored)");
+            }
+            if (t == 2 && want) {
+                avo_ui_post_double_tap();
+            }
+        }
+        return;
+    }
+    if (want) {
         if (avo_tap_feed(&s_tap, a)) {
             avo_ui_post_double_tap();
         }
     } else {
         memset(&s_tap, 0, sizeof s_tap); /* re-arm from a still wrist */
     }
+}
+
+static void gestures_step(const avo_settings_t *s, const float a[3], const float g[3])
+{
+    bool awake = avo_ui_is_awake();
+    tap_step(s, a, awake);
     if (awake && s->wrist_flick) {
         if (avo_flick_feed(&s_flick, g)) {
+            ESP_LOGI(TAG, "wrist flick");
             avo_ui_post_flick();
         }
     } else {
@@ -116,6 +126,11 @@ static void activity_roll(const avo_settings_t *s)
     if (++s_since_save >= SAVE_EVERY_S || copy.day != day_before) {
         s_since_save = 0;
         board_nvs_save(NVS_KEY_ACTIVITY, &copy, sizeof copy);
+    }
+    if (s_n % (LOG_EVERY_S * AVO_MOTION_HZ) == 0) {
+        ESP_LOGI(TAG, "gravity (%.2f, %.2f, %.2f), walking %d, steps %u, stand %d h",
+                 s_raise.g[0], s_raise.g[1], s_raise.g[2], s_steps.walking, (unsigned)copy.steps,
+                 avo_activity_stand_hours(&copy));
     }
 }
 

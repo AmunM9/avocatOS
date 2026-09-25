@@ -60,6 +60,12 @@ static void defaults_v2(avo_settings_t *s)
     s->step_goal = STEP_GOAL_DEFAULT;
 }
 
+/* Fields added in settings version 3. */
+static void defaults_v3(avo_settings_t *s)
+{
+    s->artwork = true;
+}
+
 void avo_settings_defaults(avo_settings_t *s)
 {
     memset(s, 0, sizeof *s);
@@ -77,6 +83,7 @@ void avo_settings_defaults(avo_settings_t *s)
     s->screen_timeout_s = 15;
     s->utc_offset_min = DEFAULT_UTC_OFFSET;
     defaults_v2(s);
+    defaults_v3(s);
 }
 
 bool avo_settings_upgrade(avo_settings_t *s, size_t loaded_len)
@@ -86,6 +93,12 @@ bool avo_settings_upgrade(avo_settings_t *s, size_t loaded_len)
     }
     if (s->version == 1 && loaded_len == AVO_SETTINGS_V1_SIZE) {
         defaults_v2(s);
+        defaults_v3(s);
+        s->version = AVO_SETTINGS_VERSION;
+        return true;
+    }
+    if (s->version == 2 && loaded_len == AVO_SETTINGS_V2_SIZE) {
+        defaults_v3(s);
         s->version = AVO_SETTINGS_VERSION;
         return true;
     }
