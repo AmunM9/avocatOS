@@ -54,6 +54,9 @@ static atomic_int s_btn_events;      /* bitmask, see avo_ui_post_button()      *
 static atomic_bool s_wake_req;
 static atomic_bool s_sleep_req;
 static atomic_bool s_awake = true;
+static atomic_bool s_double_tap;
+static atomic_bool s_flick;
+static void (*s_motion_probe)(bool flick);
 
 static bool s_prev_usb;
 static uint32_t s_tick_count;
@@ -446,6 +449,9 @@ static void rebuild_face_screen(void)
 
 void avo_ui_post_button(avo_btn_t btn, avo_press_t press) { atomic_fetch_or(&s_btn_events, BTN_BIT(btn, press)); }
 void avo_ui_post_wake(void) { atomic_store(&s_wake_req, true); }
+void avo_ui_post_double_tap(void) { atomic_store(&s_double_tap, true); }
+void avo_ui_post_flick(void) { atomic_store(&s_flick, true); }
+void avo_motion_set_probe(void (*probe)(bool flick)) { s_motion_probe = probe; }
 void avo_ui_post_sleep(void) { atomic_store(&s_sleep_req, true); }
 bool avo_ui_is_awake(void) { return atomic_load(&s_awake); }
 
@@ -474,6 +480,40 @@ static void handle_button(avo_btn_t btn, avo_press_t press)
         avo_pwr_sleep(&s_pwr);
     } else {
         avo_nav_control_center();
+    }
+}
+
+/* ---------------------------------------------------------------- motion gestures */
+/* Double tap: the main action of what is on screen (answer, snooze, stop,
+ * open), else play/pause the music. Wrist flick: dismiss, else go home. */
+static void handle_double_tap(void)
+{
+    if (s_motion_probe) {
+        s_motion_probe(false);
+        return;
+    }
+    if (avo_overlay_double_tap()) {
+        return;
+    }
+    avo_media_t m;
+    avo_hal_media(&m);
+    if (m.available && avo_media_recent()) {
+        avo_hal_media_command(AVO_AMS_CMD_TOGGLE);
+        avo_hal_click();
+    }
+}
+
+static void handle_flick(void)
+{
+    if (s_motion_probe) {
+        s_motion_probe(true);
+        return;
+    }
+    if (avo_overlay_flick()) {
+        return;
+    }
+    if (s_route != AVO_ROUTE_FACE && !avo_nav_locked() && !s_modal) {
+        avo_nav_face();
     }
 }
 
@@ -549,8 +589,18 @@ static void tick_cb(lv_timer_t *t)
         woke = (before == AVO_PWR_AOD || before == AVO_PWR_OFF);
         avo_pwr_activity(&s_pwr, now);
     }
-    if (atomic_exchange(&s_sleep_req, false)) {
+    if (atomic_exchange(&s_sleep_req, false) && !avo_overlay_keeps_awake()) {
         avo_pwr_sleep(&s_pwr);
+    }
+    if (avo_overlay_keeps_awake()) {
+        avo_pwr_activity(&s_pwr, now); /* a ringing alarm or a call never dims away */
+    }
+    bool tap = atomic_exchange(&s_double_tap, false);
+    bool flick = atomic_exchange(&s_flick, false);
+    if ((tap || flick) && (before == AVO_PWR_ACTIVE || before == AVO_PWR_DIM)) {
+        avo_pwr_activity(&s_pwr, now);
+        if (tap) handle_double_tap();
+        if (flick) handle_flick();
     }
     if (ev && !woke) {
         for (int b = 0; b < 2; b++) {
@@ -573,6 +623,7 @@ static void clock_cb(lv_timer_t *t)
     (void)t;
     avo_time_t now;
     avo_hal_time_now(&now);
+    avo_alarms_tick(&now); /* also while the screen sleeps */
     if (s_route == AVO_ROUTE_AOD) {
         avo_aod_tick(&now);
         return;
@@ -612,6 +663,8 @@ void avo_ui_start(void)
         avo_settings_defaults(&s_settings);
     }
     avo_settings_sanitize(&s_settings, AVO_FACE_MAX);
+    avo_hal_settings_save(&s_settings); /* first boot / upgrade: board code reads the saved copy */
+    avo_alarms_init();
     s_applied_theme = (avo_theme_mode_t)s_settings.theme;
     avo_theme_init(s_applied_theme);
     if (s_settings.face >= avo_faces_count()) {

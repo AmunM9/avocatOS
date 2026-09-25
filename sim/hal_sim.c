@@ -140,9 +140,9 @@ bool avo_hal_settings_load(avo_settings_t *out)
     if (sim_fresh_settings()) return false;
     FILE *f = fopen(SIM_SETTINGS_FILE, "rb");
     if (!f) return false;
-    bool ok = fread(out, sizeof *out, 1, f) == 1 && out->version == AVO_SETTINGS_VERSION;
+    size_t n = fread(out, 1, sizeof *out, f);
     fclose(f);
-    return ok;
+    return avo_settings_upgrade(out, n);
 }
 
 bool avo_hal_settings_save(const avo_settings_t *in)
@@ -154,7 +154,52 @@ bool avo_hal_settings_save(const avo_settings_t *in)
     return ok;
 }
 
+/* ---------------------------------------------------------------- sound, activity, alarms, weather */
+static int s_sound = -1;          /* last sound requested, -1 after a stop */
+static avo_alarms_t s_alarms_store;
+static bool s_alarms_saved;
+
 void avo_hal_click(void) {}
+void avo_hal_sound_play(avo_sound_t id) { if (!(s_sound >= 0 && avo_sound_loops((avo_sound_t)s_sound) && !avo_sound_loops(id))) s_sound = (int)id; }
+void avo_hal_sound_stop(void) { s_sound = -1; }
+int sim_last_sound(void) { return s_sound; }
+
+void avo_hal_activity(avo_activity_t *out)
+{
+    avo_time_t t;
+    avo_hal_time_now(&t);
+    avo_activity_reset(out, &t);
+    out->steps = 6482;
+    out->exercise_min = 18;
+    out->stand_mask = 0x1FE0; /* 05:00 - 12:00 */
+}
+
+bool avo_hal_alarms_load(avo_alarms_t *out)
+{
+    if (!s_alarms_saved) {
+        avo_alarms_defaults(out);
+        out->count = 2;
+        out->list[0] = (avo_alarm_t){ 6, 30, AVO_DAYS_WEEKDAYS, true };
+        out->list[1] = (avo_alarm_t){ 9, 0, AVO_DAYS_WEEKEND, false };
+        return true;
+    }
+    *out = s_alarms_store;
+    return true;
+}
+
+bool avo_hal_alarms_save(const avo_alarms_t *in) { s_alarms_store = *in; s_alarms_saved = true; return true; }
+
+bool avo_hal_weather(avo_weather_t *out)
+{
+    static const int code[AVO_WX_DAYS] = { 2, 61, 80, 0 };
+    static const float hi[AVO_WX_DAYS] = { 19.6f, 18.4f, 17.9f, 21.0f }, lo[AVO_WX_DAYS] = { 11.1f, 10.3f, 10.8f, 9.6f };
+    memset(out, 0, sizeof *out);
+    if (!s_phone_ready) return false; /* "online" in the simulator */
+    *out = (avo_weather_t){ .valid = true, .temp = 19.3f, .code = 2, .is_day = true, .days = AVO_WX_DAYS, .updated_ms = 1 };
+    for (int i = 0; i < AVO_WX_DAYS; i++) { out->day_code[i] = code[i]; out->day_max[i] = hi[i]; out->day_min[i] = lo[i]; }
+    snprintf(out->city, sizeof out->city, "Bogotá");
+    return true;
+}
 
 /* ---------------------------------------------------------------- fake iPhone */
 static void add_notif(uint32_t uid, uint8_t cat, const char *app, const char *title, const char *msg, bool alert)

@@ -27,6 +27,8 @@ void avo_ui_start(void);
 void avo_ui_post_button(avo_btn_t btn, avo_press_t press);
 void avo_ui_post_wake(void);  /* wrist raise                */
 void avo_ui_post_sleep(void); /* wrist lowered / cover      */
+void avo_ui_post_double_tap(void); /* two knocks on the case          */
+void avo_ui_post_flick(void);      /* quick wrist turn away and back   */
 
 /* True while the UI wants full refresh speed (not in AOD/OFF). Board code
  * may use it to lower the CPU clock or skip the touch poll. */

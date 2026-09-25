@@ -3,7 +3,9 @@
  *  - notification banner (slides down, tap opens it, swipe up / timeout hides)
  *  - incoming call (accept / decline through ANCS)
  *  - charging animation when USB is plugged in (ring fills to the level)
+ *  - alert: a ringing alarm or a finished timer, with its sound
  * Only one overlay exists at a time; a newer one replaces the older.
+ * Double tap runs the overlay's main action, a wrist flick dismisses it.
  */
 #include <stdio.h>
 #include <string.h>
@@ -13,24 +15,40 @@
 #define CHARGE_MS 2800
 #define CHARGE_RING 260
 #define CALL_BTN 104
+#define ALERT_BTN_H 78
 
-typedef enum { OV_NONE, OV_BANNER, OV_CALL, OV_CHARGE } ov_kind_t;
+typedef enum { OV_NONE, OV_BANNER, OV_CALL, OV_CHARGE, OV_ALERT } ov_kind_t;
 
 static struct {
     ov_kind_t kind;
     lv_obj_t *root;
     uint32_t uid;
     uint32_t until_ms;
+    avo_alert_t alert;           /* OV_ALERT: callbacks (strings are not kept) */
 } ov;
+
+static bool sounds_on(void) { return avo_settings()->sounds; }
 
 bool avo_overlay_active(void) { return ov.kind != OV_NONE; }
 
 static void close_now(void)
 {
+    if (ov.kind == OV_CALL || ov.kind == OV_ALERT) {
+        avo_hal_sound_stop();
+    }
     if (ov.root) {
         lv_obj_delete(ov.root);
     }
     memset(&ov, 0, sizeof ov);
+}
+
+/* Close, then run `fn` (which may open another overlay). */
+static void close_then(void (*fn)(void))
+{
+    close_now();
+    if (fn) {
+        fn();
+    }
 }
 
 bool avo_overlay_dismiss(void)
@@ -38,9 +56,11 @@ bool avo_overlay_dismiss(void)
     if (ov.kind == OV_NONE) {
         return false;
     }
-    close_now();
+    close_then(ov.kind == OV_ALERT ? ov.alert.on_dismiss : NULL);
     return true;
 }
+
+bool avo_overlay_keeps_awake(void) { return ov.kind == OV_CALL || ov.kind == OV_ALERT; }
 
 static lv_obj_t *overlay_root(ov_kind_t kind, bool full_screen)
 {
@@ -121,7 +141,9 @@ void avo_overlay_banner(const avo_notif_t *n)
     lv_anim_set_duration(&a, AVO_ANIM_MS + 60);
     lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
     lv_anim_start(&a);
-    avo_hal_click();
+    if (sounds_on()) {
+        avo_hal_sound_play(AVO_SOUND_NOTIFY);
+    }
 }
 
 /* ================================================================= incoming call */
@@ -133,7 +155,7 @@ static void call_btn_cb(lv_event_t *e)
     close_now();
 }
 
-static lv_obj_t *call_button(lv_obj_t *parent, lv_color_t color, const char *sym, bool accept)
+static lv_obj_t *call_button(lv_obj_t *parent, lv_color_t color, bool accept)
 {
     lv_obj_t *b = lv_obj_create(parent);
     lv_obj_remove_style_all(b);
@@ -144,8 +166,11 @@ static lv_obj_t *call_button(lv_obj_t *parent, lv_color_t color, const char *sym
     lv_obj_set_style_transform_scale(b, 236, LV_STATE_PRESSED);
     lv_obj_set_style_transform_pivot_x(b, CALL_BTN / 2, 0);
     lv_obj_set_style_transform_pivot_y(b, CALL_BTN / 2, 0);
-    lv_obj_t *l = avo_label(b, &avo_font_40, lv_color_white(), sym);
-    lv_obj_center(l);
+    if (accept) {
+        lv_obj_center(avo_mask_image(b, &avo_img_phone_36, lv_color_white()));
+    } else {
+        lv_obj_center(avo_label(b, &avo_font_40, lv_color_white(), LV_SYMBOL_CLOSE));
+    }
     lv_obj_add_event_cb(b, call_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)accept);
     return b;
 }
@@ -164,7 +189,7 @@ void avo_overlay_call(const avo_notif_t *n)
     lv_obj_align(who, LV_ALIGN_TOP_MID, 0, 110);
     lv_obj_t *what = avo_label(r, &avo_font_26, p->label2, n->app[0] ? n->app : "iPhone");
     lv_obj_align_to(what, who, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-    lv_obj_t *ic = avo_app_icon(r, AVO_HUE_MINT, LV_SYMBOL_CALL, 64);
+    lv_obj_t *ic = avo_app_icon_image(r, AVO_HUE_MINT, &avo_img_phone_27, 64);
     lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 26);
 
     lv_obj_t *row = lv_obj_create(r);
@@ -173,8 +198,11 @@ void avo_overlay_call(const avo_notif_t *n)
     lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -30);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    call_button(row, avo_hue(AVO_HUE_EMBER), LV_SYMBOL_CLOSE, false);
-    call_button(row, lv_color_hex(0x30D158), LV_SYMBOL_CALL, true);
+    call_button(row, lv_color_hex(0x30D158), true); /* answer on the left, like iOS */
+    call_button(row, avo_hue(AVO_HUE_EMBER), false);
+    if (sounds_on()) {
+        avo_hal_sound_play(AVO_SOUND_RING);
+    }
 }
 
 /* ================================================================= charging */
@@ -250,6 +278,101 @@ void avo_overlay_charging(const avo_battery_t *b)
     lv_anim_set_delay(&z, 120);
     lv_anim_set_path_cb(&z, lv_anim_path_overshoot);
     lv_anim_start(&z);
+    if (sounds_on()) {
+        avo_hal_sound_play(AVO_SOUND_CHARGE);
+    }
+}
+
+/* ================================================================= alert (alarm, timer) */
+
+static void alert_btn_cb(lv_event_t *e)
+{
+    bool primary = (bool)(intptr_t)lv_event_get_user_data(e);
+    close_then(primary ? ov.alert.on_primary : ov.alert.on_secondary);
+}
+
+static void alert_button(lv_obj_t *parent, const char *text, lv_color_t color, bool primary)
+{
+    lv_obj_t *b = lv_obj_create(parent);
+    lv_obj_remove_style_all(b);
+    lv_obj_set_size(b, lv_pct(100), ALERT_BTN_H);
+    lv_obj_set_style_radius(b, ALERT_BTN_H / 2, 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(b, lv_color_mix(color, lv_color_black(), 90), 0);
+    lv_obj_set_style_bg_color(b, lv_color_mix(color, lv_color_black(), 140), LV_STATE_PRESSED);
+    lv_obj_center(avo_label(b, &avo_font_30, color, text));
+    lv_obj_add_event_cb(b, alert_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)primary);
+}
+
+void avo_overlay_alert(const avo_alert_t *a)
+{
+    const avo_palette_t *p = avo_pal();
+    lv_obj_t *r = overlay_root(OV_ALERT, true);
+    ov.alert = *a;
+    ov.alert.title = ov.alert.big = ov.alert.caption = NULL; /* copied into labels below */
+    ov.until_ms = a->timeout_ms ? avo_hal_millis() + a->timeout_ms : 0;
+    lv_color_t hue = avo_theme_is_avocado() ? p->accent : avo_hue(a->hue);
+
+    lv_obj_t *ic = avo_app_icon(r, a->hue, a->symbol, 64);
+    lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_t *title = avo_label(r, &avo_font_30, hue, a->title);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 96);
+    /* the 76 px font only has digits: "07:30" uses it, "¡Listo!" does not */
+    bool digits = strspn(a->big, "0123456789:. ") == strlen(a->big);
+    lv_obj_t *big = avo_label(r, digits ? &avo_font_digits_76 : &avo_font_40, p->label, a->big);
+    lv_obj_align(big, LV_ALIGN_TOP_MID, 0, 138);
+    if (a->caption) {
+        lv_obj_t *cap = avo_label(r, &avo_font_22, p->label2, a->caption);
+        lv_obj_align_to(cap, big, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+    }
+
+    lv_obj_t *col = lv_obj_create(r);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_size(col, AVO_W - 2 * AVO_PAD, LV_SIZE_CONTENT);
+    lv_obj_align(col, LV_ALIGN_BOTTOM_MID, 0, -26);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(col, 12, 0);
+    if (a->secondary) {
+        alert_button(col, a->secondary, hue, false);
+    }
+    alert_button(col, a->primary, avo_hue(AVO_HUE_EMBER), true);
+    avo_hal_sound_play(a->sound); /* alarms sound even with Sonidos off: there is no vibration */
+}
+
+/* ================================================================= motion gestures */
+
+bool avo_overlay_double_tap(void)
+{
+    switch (ov.kind) {
+    case OV_BANNER: {
+        uint32_t uid = ov.uid;
+        close_now();
+        avo_nav_notifications();
+        avo_notif_open_detail(uid);
+        return true;
+    }
+    case OV_CALL:
+        avo_hal_notif_action(ov.uid, true); /* answer, as on watchOS */
+        close_now();
+        return true;
+    case OV_ALERT:
+        close_then(ov.alert.on_double_tap);
+        return true;
+    case OV_CHARGE:
+        close_now();
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool avo_overlay_flick(void)
+{
+    if (ov.kind == OV_CALL) {
+        avo_hal_sound_stop(); /* silence the ring; the call stays on screen */
+        return true;
+    }
+    return avo_overlay_dismiss();
 }
 
 /* ================================================================= housekeeping */
@@ -260,7 +383,7 @@ void avo_overlays_tick(void)
         return;
     }
     if (ov.until_ms && (int32_t)(avo_hal_millis() - ov.until_ms) >= 0) {
-        close_now();
+        avo_overlay_dismiss(); /* an alert runs its dismiss action (snooze / stop) */
         return;
     }
     if (ov.kind == OV_CALL) {

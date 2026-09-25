@@ -362,8 +362,6 @@ static void page_developer(lv_obj_t *scr)
 
 /* ================================================================= main list */
 
-static void sounds_sw_cb(lv_event_t *e) { commit_switch(e, &avo_settings()->sounds); }
-
 static void push_cb(lv_event_t *e)
 {
     void (*build)(lv_obj_t *) = (void (*)(lv_obj_t *))lv_event_get_user_data(e);
@@ -371,6 +369,7 @@ static void push_cb(lv_event_t *e)
     if (build == page_info) leave = info_leave;
     if (build == avo_settings_wifi_page) leave = avo_settings_wifi_leave;
     if (build == avo_settings_bt_page) leave = avo_settings_bt_leave;
+    if (build == avo_settings_gestures_page) leave = avo_settings_gestures_leave;
     avo_hal_click();
     avo_nav_push(build, leave);
 }
@@ -420,7 +419,12 @@ static void settings_build(lv_obj_t *scr)
     nav_row(page, AVO_HUE_SKY, AVO_SYM_SUN, "Pantalla", NULL, page_display);
     nav_row(page, AVO_HUE_LIME, AVO_SYM_BRUSH, "Apariencia", avo_theme_is_avocado() ? "Avocado" : "Limpio", page_appearance);
     nav_row(page, AVO_HUE_SOLAR, AVO_SYM_CLOCK, "Hora", NULL, page_time);
-    avo_row_switch(page, AVO_HUE_EMBER, LV_SYMBOL_BELL, "Sonidos", avo_settings()->sounds, sounds_sw_cb, NULL);
+    char vol[12] = "No";
+    if (avo_settings()->sounds) {
+        snprintf(vol, sizeof vol, "%u %%", avo_settings()->volume);
+    }
+    nav_row(page, AVO_HUE_EMBER, LV_SYMBOL_BELL, "Sonido", vol, avo_settings_sound_page);
+    nav_row(page, AVO_HUE_MINT, AVO_SYM_TAP, "Gestos", NULL, avo_settings_gestures_page);
 
     avo_section(page, "General");
     nav_row(page, AVO_HUE_GRAPHITE, AVO_SYM_INFO, "Información", NULL, page_info);

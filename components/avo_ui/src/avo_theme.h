@@ -22,6 +22,8 @@ LV_IMAGE_DECLARE(avo_img_mark_160);
 LV_IMAGE_DECLARE(avo_img_mark_56);
 LV_IMAGE_DECLARE(avo_img_half_300);
 LV_IMAGE_DECLARE(avo_img_half_36);
+LV_IMAGE_DECLARE(avo_img_phone_27); /* mirrored handset, A8 */
+LV_IMAGE_DECLARE(avo_img_phone_36);
 
 /* Semantic app colors: each app keeps one color everywhere. */
 typedef enum {
@@ -86,6 +88,10 @@ lv_obj_t *avo_glass(lv_obj_t *parent);
 /* Glyph size that fits a round icon of diameter d. */
 const lv_font_t *avo_symbol_font(int32_t d);
 lv_obj_t *avo_app_icon(lv_obj_t *parent, avo_hue_t hue, const char *symbol, int32_t diameter);
+/* Same disc with an A8 image (e.g. the mirrored phone) instead of a glyph. */
+lv_obj_t *avo_app_icon_image(lv_obj_t *parent, avo_hue_t hue, const lv_image_dsc_t *a8, int32_t diameter);
+/* An A8 image drawn in `color`. */
+lv_obj_t *avo_mask_image(lv_obj_t *parent, const lv_image_dsc_t *a8, lv_color_t color);
 /* Scrollable page with a colored title, used by every app. */
 lv_obj_t *avo_page_create(lv_obj_t *screen, const char *title, avo_hue_t hue);
 /* Grouped list row: symbol + text (+ optional value on the right). */

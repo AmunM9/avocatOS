@@ -181,7 +181,9 @@ static lv_obj_t *disc(lv_obj_t *parent, int32_t d)
     return o;
 }
 
-lv_obj_t *avo_app_icon(lv_obj_t *parent, avo_hue_t hue, const char *symbol, int32_t d)
+/* Coloured disc (or avocado slice); returns where the glyph goes and its colour. */
+static lv_obj_t *icon_base(lv_obj_t *parent, avo_hue_t hue, int32_t d, lv_obj_t **glyph_parent_out,
+                           lv_color_t *glyph_color)
 {
     lv_obj_t *outer = disc(parent, d);
     lv_obj_t *glyph_parent = outer;
@@ -203,9 +205,37 @@ lv_obj_t *avo_app_icon(lv_obj_t *parent, avo_hue_t hue, const char *symbol, int3
         lv_obj_set_style_bg_grad_color(outer, bottom, 0);
         lv_obj_set_style_bg_grad_dir(outer, LV_GRAD_DIR_VER, 0);
     }
-    lv_color_t glyph_color = avo_theme_is_avocado() ? avo_hue(hue) : lv_color_white();
-    lv_obj_t *g = avo_label(glyph_parent, avo_symbol_font(d), glyph_color, symbol);
+    *glyph_color = avo_theme_is_avocado() ? avo_hue(hue) : lv_color_white();
+    *glyph_parent_out = glyph_parent;
+    return outer;
+}
+
+lv_obj_t *avo_app_icon(lv_obj_t *parent, avo_hue_t hue, const char *symbol, int32_t d)
+{
+    lv_obj_t *glyph_parent;
+    lv_color_t color;
+    lv_obj_t *outer = icon_base(parent, hue, d, &glyph_parent, &color);
+    lv_obj_t *g = avo_label(glyph_parent, avo_symbol_font(d), color, symbol);
     lv_obj_center(g);
+    return outer;
+}
+
+lv_obj_t *avo_mask_image(lv_obj_t *parent, const lv_image_dsc_t *a8, lv_color_t color)
+{
+    lv_obj_t *img = lv_image_create(parent);
+    lv_image_set_src(img, a8);
+    lv_obj_set_style_image_recolor(img, color, 0);
+    lv_obj_set_style_image_recolor_opa(img, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(img, LV_OBJ_FLAG_CLICKABLE);
+    return img;
+}
+
+lv_obj_t *avo_app_icon_image(lv_obj_t *parent, avo_hue_t hue, const lv_image_dsc_t *a8, int32_t d)
+{
+    lv_obj_t *glyph_parent;
+    lv_color_t color;
+    lv_obj_t *outer = icon_base(parent, hue, d, &glyph_parent, &color);
+    lv_obj_center(avo_mask_image(glyph_parent, a8, color));
     return outer;
 }
 

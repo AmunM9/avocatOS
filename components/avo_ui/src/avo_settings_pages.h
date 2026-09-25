@@ -4,7 +4,7 @@
 #include "lvgl.h"
 #include "avo_theme.h"
 
-#define AVO_VERSION "0.1.0"
+#define AVO_VERSION "0.3.0"
 
 lv_obj_t *avo_subpage_create(lv_obj_t *screen, const char *title, avo_hue_t hue);
 /* Non-interactive key/value row; returns the value label. */
@@ -15,3 +15,6 @@ void avo_settings_bt_page(lv_obj_t *screen);
 void avo_settings_bt_leave(void);
 void avo_settings_wifi_page(lv_obj_t *screen);
 void avo_settings_wifi_leave(void);
+void avo_settings_sound_page(lv_obj_t *screen);
+void avo_settings_gestures_page(lv_obj_t *screen);
+void avo_settings_gestures_leave(void);

@@ -45,6 +45,21 @@ int avo_batt_percent_from_mv(int mv)
 #define UTC_MAX 840
 #define DEFAULT_UTC_OFFSET (-300) /* UTC-5 (Bogotá); changed from Ajustes > Hora */
 
+#define VOLUME_DEFAULT 70
+#define STEP_GOAL_DEFAULT 8000
+#define STEP_GOAL_MIN 1000
+#define STEP_GOAL_MAX 50000
+
+/* Fields added in settings version 2. */
+static void defaults_v2(avo_settings_t *s)
+{
+    s->volume = VOLUME_DEFAULT;
+    s->double_tap = true;
+    s->wrist_flick = true;
+    s->weather = true;
+    s->step_goal = STEP_GOAL_DEFAULT;
+}
+
 void avo_settings_defaults(avo_settings_t *s)
 {
     memset(s, 0, sizeof *s);
@@ -61,6 +76,20 @@ void avo_settings_defaults(avo_settings_t *s)
     s->show_fps = false;
     s->screen_timeout_s = 15;
     s->utc_offset_min = DEFAULT_UTC_OFFSET;
+    defaults_v2(s);
+}
+
+bool avo_settings_upgrade(avo_settings_t *s, size_t loaded_len)
+{
+    if (s->version == AVO_SETTINGS_VERSION && loaded_len == sizeof *s) {
+        return true;
+    }
+    if (s->version == 1 && loaded_len == AVO_SETTINGS_V1_SIZE) {
+        defaults_v2(s);
+        s->version = AVO_SETTINGS_VERSION;
+        return true;
+    }
+    return false;
 }
 
 #define CLAMP_FIELD(field, lo, hi) do { \
@@ -78,6 +107,8 @@ bool avo_settings_sanitize(avo_settings_t *s, uint8_t face_count)
     CLAMP_FIELD(s->brightness, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
     CLAMP_FIELD(s->screen_timeout_s, TIMEOUT_MIN_S, TIMEOUT_MAX_S);
     CLAMP_FIELD(s->utc_offset_min, UTC_MIN, UTC_MAX);
+    CLAMP_FIELD(s->volume, 0, 100);
+    CLAMP_FIELD(s->step_goal, STEP_GOAL_MIN, STEP_GOAL_MAX);
     if (s->theme > AVO_THEME_AVOCADO) {
         s->theme = AVO_THEME_CLEAN;
         changed = true;

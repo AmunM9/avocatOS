@@ -86,15 +86,7 @@ void avo_hal_display_brightness(uint8_t percent) { board_display_brightness(perc
 void avo_hal_battery(avo_battery_t *out) { board_pmu_read(out); }
 void avo_hal_restart(void) { esp_restart(); }
 
-void avo_hal_accel(avo_accel_t *out)
-{
-    out->valid = board_imu_read(&out->ax, &out->ay, &out->az);
-}
 
-void avo_hal_click(void)
-{
-    /* The ES8311 speaker path is added with the audio phase; silent for now. */
-}
 
 /* ================================================================= system */
 
@@ -138,7 +130,8 @@ bool avo_hal_settings_load(avo_settings_t *out)
     size_t len = sizeof *out;
     esp_err_t err = nvs_get_blob(h, NVS_KEY, out, &len);
     nvs_close(h);
-    if (err != ESP_OK || len != sizeof *out || out->version != AVO_SETTINGS_VERSION) {
+    /* a version 1 blob is shorter: it upgrades in place, keeping Wi-Fi etc. */
+    if (err != ESP_OK || !avo_settings_upgrade(out, len)) {
         return false;
     }
     s_cache = *out;
@@ -163,6 +156,48 @@ bool avo_hal_settings_save(const avo_settings_t *in)
     }
     nvs_close(h);
     return err == ESP_OK;
+}
+
+/* ================================================================= small blobs */
+
+bool board_nvs_load(const char *key, void *buf, size_t *len)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
+        return false;
+    }
+    esp_err_t err = nvs_get_blob(h, key, buf, len);
+    nvs_close(h);
+    return err == ESP_OK;
+}
+
+bool board_nvs_save(const char *key, const void *buf, size_t len)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
+        return false;
+    }
+    esp_err_t err = nvs_set_blob(h, key, buf, len);
+    if (err == ESP_OK) {
+        err = nvs_commit(h);
+    }
+    nvs_close(h);
+    return err == ESP_OK;
+}
+
+bool avo_hal_alarms_load(avo_alarms_t *out)
+{
+    size_t len = sizeof *out;
+    if (!board_nvs_load("alarms", out, &len) || len != sizeof *out || out->version != AVO_ALARMS_VERSION) {
+        return false;
+    }
+    avo_alarms_sanitize(out);
+    return true;
+}
+
+bool avo_hal_alarms_save(const avo_alarms_t *in)
+{
+    return board_nvs_save("alarms", in, sizeof *in);
 }
 
 /* ================================================================= init */
@@ -191,6 +226,7 @@ esp_err_t avo_board_init(void)
         temperature_sensor_enable(s_tsens);
     }
     ESP_ERROR_CHECK(board_display_init());
+    board_audio_init(); /* optional: the watch works silently without it */
     ESP_ERROR_CHECK(board_input_start());
     ESP_LOGI(TAG, "internal RAM free %u KB (largest %u KB), PSRAM free %u KB",
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),

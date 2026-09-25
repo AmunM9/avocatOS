@@ -32,6 +32,9 @@ extern const avo_app_t AVO_APP_TIMER;
 extern const avo_app_t AVO_APP_FLASHLIGHT;
 extern const avo_app_t AVO_APP_LEVEL;
 extern const avo_app_t AVO_APP_FACES;
+extern const avo_app_t AVO_APP_ALARMS;
+extern const avo_app_t AVO_APP_ACTIVITY;
+extern const avo_app_t AVO_APP_WEATHER;
 
 /* ---------------------------------------------------------------- navigation */
 typedef enum {
@@ -70,6 +73,21 @@ void avo_nav_push(void (*build)(lv_obj_t *screen), void (*leave)(void));
 /* ---------------------------------------------------------------- gestures */
 /* Wraps the pointer read callback with the swipe recognizer. */
 void avo_gesture_install(void);
+/* Ajustes > Gestos test area: called on every double tap / flick. */
+void avo_motion_set_probe(void (*probe)(bool flick));
+
+/* ---------------------------------------------------------------- alarms */
+void avo_alarms_init(void);                /* loads them                       */
+avo_alarms_t *avo_alarms(void);
+void avo_alarms_commit(void);              /* persist after editing            */
+void avo_alarms_tick(const avo_time_t *t); /* 1 Hz: ring, snooze               */
+/* "07:30" of the next alarm (or of the snoozed one). False if none. */
+bool avo_alarms_next_text(char *out, size_t len, bool *snoozed);
+/* Finished countdown: sound + alert (Detener / Repetir). */
+void avo_alert_timer_done(uint32_t minutes, void (*repeat)(void));
+
+/* ---------------------------------------------------------------- glanceable data */
+const char *avo_wx_symbol(int wmo_code, bool is_day);
 
 /* ---------------------------------------------------------------- overlays (lv_layer_top) */
 void avo_overlay_banner(const avo_notif_t *n);
@@ -78,6 +96,27 @@ void avo_overlay_charging(const avo_battery_t *b);
 bool avo_overlay_active(void);
 bool avo_overlay_dismiss(void);            /* true if something was closed     */
 void avo_overlays_tick(void);              /* 4 Hz: timeouts, ended calls      */
+
+/* Full-screen alert with its (looping) sound: a ringing alarm, a finished
+ * timer. Strings are copied; callbacks run after the overlay closed. */
+typedef struct {
+    const char *title, *big, *caption;     /* "Alarma", "07:30", "Entre semana" */
+    const char *symbol;
+    avo_hue_t hue;
+    const char *primary;                   /* bottom button, e.g. "Detener"     */
+    const char *secondary;                 /* optional, e.g. "Posponer"         */
+    void (*on_primary)(void);
+    void (*on_secondary)(void);
+    void (*on_double_tap)(void);
+    void (*on_dismiss)(void);              /* button, swipe, flick or timeout   */
+    avo_sound_t sound;
+    uint32_t timeout_ms;                   /* 0 = never                         */
+} avo_alert_t;
+
+void avo_overlay_alert(const avo_alert_t *a);
+bool avo_overlay_keeps_awake(void);        /* call or alert on screen          */
+bool avo_overlay_double_tap(void);         /* main action; false if nothing    */
+bool avo_overlay_flick(void);              /* dismiss; false if nothing        */
 /* ---------------------------------------------------------------- faces */
 #define AVO_FACE_MAX 4
 int avo_faces_count(void);                   /* depends on theme            */

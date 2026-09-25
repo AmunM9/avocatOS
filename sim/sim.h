@@ -13,3 +13,5 @@ void sim_set_brightness(uint8_t percent);
 void sim_phone_connect(void);
 void sim_phone_push(bool incoming_call);
 void sim_set_charger(bool on);
+/* Last sound the UI asked for, -1 after a stop. */
+int sim_last_sound(void);

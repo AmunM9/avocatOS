@@ -22,6 +22,10 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | ![](docs/screenshots/control-center.png) | ![](docs/screenshots/now-playing.png) | ![](docs/screenshots/notifications.png) | ![](docs/screenshots/notification-detail.png) |
 | **Smart Stack** | **Ajustes** | **Aviso** | **Llamada entrante** |
 | ![](docs/screenshots/smart-stack.png) | ![](docs/screenshots/settings.png) | ![](docs/screenshots/banner.png) | ![](docs/screenshots/incoming-call.png) |
+| **Actividad** | **Tiempo** | **Alarmas** | **Editar alarma** |
+| ![](docs/screenshots/activity.png) | ![](docs/screenshots/weather.png) | ![](docs/screenshots/alarms.png) | ![](docs/screenshots/alarm-editor.png) |
+| **Temporizador terminado** | **Gestos** | **Sonido** | **Tiempo (Avocado)** |
+| ![](docs/screenshots/timer-done.png) | ![](docs/screenshots/settings-gestures.png) | ![](docs/screenshots/settings-sound.png) | ![](docs/screenshots/avocado-weather.png) |
 | **Modo Avocado: esfera Hass** | **Panal Avocado** | **Siempre activa** | **Cargando (Avocado)** |
 | ![](docs/screenshots/avocado-face-hass.png) | ![](docs/screenshots/avocado-grid.png) | ![](docs/screenshots/avocado-aod.png) | ![](docs/screenshots/avocado-charging.png) |
 
@@ -29,8 +33,13 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 
 | Área | Contenido |
 |---|---|
-| Esferas | Flux (dígitos con degradado), Modular (complicaciones), Cronógrafo (analógica) y Hass (solo en Modo Avocado) |
-| Apps | Cuadrícula en panal con efecto lupa: Ajustes, Música, Cronómetro, Temporizador, Linterna, Nivel, Esferas |
+| Esferas | Flux (dígitos con degradado), Modular (batería, pasos, tiempo y próxima alarma), Cronógrafo (analógica) y Hass (solo en Modo Avocado) |
+| Apps | Cuadrícula en panal con efecto lupa: Ajustes, Música, Actividad, Tiempo, Alarmas, Cronómetro, Temporizador, Linterna, Nivel, Esferas |
+| Actividad | Podómetro con el acelerómetro y tres anillos: pasos (meta configurable), minutos de ejercicio y horas de pie |
+| Tiempo | Pronóstico de [Open-Meteo](https://open-meteo.com) por Wi-Fi, sin cuenta ni clave; ubicación aproximada por IP con [ipwho.is](https://ipwho.is) |
+| Alarmas | Hasta 8, con días de la semana; posponer 9 min; suenan también con la pantalla apagada |
+| Sonido | Altavoz ES8311: sonidos sintetizados (clic, aviso, cargador, alarma, temporizador, llamada) y volumen |
+| Gestos de muñeca | Doble toque en la caja y giro rápido de muñeca, detectados con el sensor de movimiento |
 | iPhone | Notificaciones con acciones (ANCS), llamadas entrantes (aceptar/rechazar), control de música y volumen (AMS), hora del teléfono (CTS) |
 | Música | Página *Reproduciendo* bajo el Centro de control, con carátula descargada por Wi-Fi |
 | Sistema | Centro de control, Smart Stack, pantalla siempre activa (anti-quemado), animación de carga, levantar la muñeca para activar |
@@ -49,6 +58,8 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 | Notificaciones | ↑ desde el borde inferior o → | Volver a la esfera (desplazar la lista nunca la cierra) |
 | Botón **BOOT** | pulsar | Esfera ↔ apps (doble pulsación: última app) |
 | Botón **PWR** | pulsar / mantener | Centro de control (dentro, ↑ = Reproduciendo) / dormir |
+| Muñeca | doble toque en la caja | Contestar llamada, posponer alarma, detener temporizador, abrir aviso o pausar la música |
+| Muñeca | giro rápido hacia fuera y vuelta | Descartar aviso, silenciar llamada, volver a la esfera |
 
 ## Hardware
 
@@ -61,10 +72,12 @@ Waveshare **ESP32-S3-Touch-AMOLED-2.06**:
 
 ```
 components/
-  avo_core/   lógica pura, sin hardware y con pruebas: panal, hora, energía, gestos, parsers ANCS/AMS/CTS, texto
+  avo_core/   lógica pura, sin hardware y con pruebas: panal, hora, energía, gestos, parsers ANCS/AMS/CTS,
+              texto, sonidos, podómetro, doble toque, giro de muñeca, actividad, alarmas, tiempo
   avo_hal/    contrato de hardware que usa la interfaz
   avo_ui/     interfaz LVGL 9.5: tema, navegación, esferas, paneles, apps, recursos generados
-  avo_board/  placa real: pantalla QSPI a 80 MHz, táctil, AXP2101, QMI8658, PCF85063, botones, Wi-Fi, BLE (NimBLE), carátulas
+  avo_board/  placa real: pantalla QSPI a 80 MHz, táctil, AXP2101, QMI8658 a 100 Hz, PCF85063, ES8311,
+              botones, Wi-Fi, BLE (NimBLE), carátulas, pronóstico
 sim/          simulador de escritorio (SDL2) con la misma interfaz y pruebas de gestos de extremo a extremo
 tests/        pruebas unitarias de avo_core
 tools/        idf.sh (entorno ESP-IDF 6.0.3) y gen_assets.py (fuentes e imágenes)
@@ -102,6 +115,7 @@ A partir de ahí el iPhone se reconecta solo. Comparte las notificaciones si act
 ## Privacidad
 
 - Para mostrar la carátula, el reloj envía el **artista y el título** de la canción a la API pública de búsqueda de iTunes (Apple), por HTTPS y solo con Wi-Fi.
+- Para el tiempo, el reloj pide a ipwho.is su ubicación aproximada según la IP pública (una vez por arranque) y envía a Open-Meteo las coordenadas redondeadas a unos 1 km. Se desactiva en la app Tiempo.
 - Las notificaciones no salen del reloj y solo se guardan en RAM.
 - La contraseña del Wi-Fi se guarda en la NVS del reloj.
 
@@ -124,5 +138,5 @@ El BSP oficial usa QSPI a 40 MHz y un único buffer de 20 líneas en PSRAM. avoc
 - **Código de avocatOS:** MIT (ver [`LICENSE`](LICENSE)).
 - **Fuentes:** Inter, Nunito y Noto Emoji, con licencia SIL OFL 1.1 (ver `assets/fonts/OFL-*.txt`).
 - **Símbolos:** FontAwesome 5 Free, incluidos con LVGL.
-- **Dependencias:** LVGL (MIT); esp_lvgl_port, esp_lcd_sh8601 y esp_jpeg (Apache 2.0).
+- **Dependencias:** LVGL (MIT); esp_lvgl_port, esp_lcd_sh8601, esp_jpeg y esp_codec_dev (Apache 2.0).
 - La marca de aguacate la dibuja `tools/gen_assets.py`.

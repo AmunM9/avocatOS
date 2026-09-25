@@ -10,7 +10,6 @@
 #define LEVEL_REFRESH_MS 33
 #define LEVEL_RADIUS 150
 #define TIMER_CHECK_MS 250
-#define TIMER_ALARM_BEEPS 6
 
 /* ------------------------------------------------------------------ common */
 
@@ -192,7 +191,6 @@ static struct {
     bool running;
     uint32_t end_ms;
     uint32_t total_ms;
-    int beeps_left;
     lv_timer_t *watch; /* global: lives while a countdown exists */
 } tm_state;
 
@@ -208,7 +206,7 @@ static void tm_show(void)
     if (!tm_ui.screen) {
         return;
     }
-    bool active = tm_state.running || tm_state.beeps_left > 0;
+    bool active = tm_state.running;
     if (active) {
         lv_obj_add_flag(tm_ui.presets, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(tm_ui.arc, LV_OBJ_FLAG_HIDDEN);
@@ -234,28 +232,22 @@ static void tm_show(void)
     lv_arc_set_value(tm_ui.arc, tm_state.total_ms ? (int32_t)(left * 1000 / tm_state.total_ms) : 0);
 }
 
+static void tm_start(uint32_t minutes);
+
+static void tm_repeat(void) { tm_start(tm_state.total_ms / 60000u); }
+
 static void tm_watch_cb(lv_timer_t *t)
 {
     (void)t;
-    uint32_t now = avo_hal_millis();
-    if (tm_state.running && (int32_t)(tm_state.end_ms - now) <= 0) {
+    if (tm_state.running && (int32_t)(tm_state.end_ms - avo_hal_millis()) <= 0) {
         tm_state.running = false;
-        tm_state.beeps_left = TIMER_ALARM_BEEPS;
-        avo_ui_post_wake();
-        if (!tm_ui.screen) {
-            avo_nav_app(&AVO_APP_TIMER);
-        }
-    }
-    if (tm_state.beeps_left > 0) {
-        avo_hal_click();
-        tm_state.beeps_left--;
-    }
-    tm_show();
-    if (!tm_state.running && tm_state.beeps_left == 0) {
         lv_timer_delete(tm_state.watch);
         tm_state.watch = NULL;
         tm_show();
+        avo_alert_timer_done(tm_state.total_ms / 60000u, tm_repeat);
+        return;
     }
+    tm_show();
 }
 
 static void tm_start(uint32_t minutes)
@@ -263,7 +255,6 @@ static void tm_start(uint32_t minutes)
     tm_state.total_ms = minutes * 60000u;
     tm_state.end_ms = avo_hal_millis() + tm_state.total_ms;
     tm_state.running = true;
-    tm_state.beeps_left = 0;
     if (!tm_state.watch) {
         tm_state.watch = lv_timer_create(tm_watch_cb, TIMER_CHECK_MS, NULL);
     }
@@ -281,7 +272,10 @@ static void cancel_cb(lv_event_t *e)
     (void)e;
     avo_hal_click();
     tm_state.running = false;
-    tm_state.beeps_left = 0;
+    if (tm_state.watch) {
+        lv_timer_delete(tm_state.watch);
+        tm_state.watch = NULL;
+    }
     tm_show();
 }
 
@@ -496,7 +490,7 @@ const avo_app_t AVO_APP_FACES = {
 /* ================================================================= registry */
 
 const avo_app_t *const AVO_APPS[] = {
-    &AVO_APP_SETTINGS, &AVO_APP_MUSIC, &AVO_APP_STOPWATCH, &AVO_APP_TIMER,
-    &AVO_APP_FLASHLIGHT, &AVO_APP_LEVEL, &AVO_APP_FACES,
+    &AVO_APP_SETTINGS, &AVO_APP_MUSIC, &AVO_APP_ACTIVITY, &AVO_APP_WEATHER, &AVO_APP_ALARMS,
+    &AVO_APP_STOPWATCH, &AVO_APP_TIMER, &AVO_APP_FLASHLIGHT, &AVO_APP_LEVEL, &AVO_APP_FACES,
 };
 const int AVO_APP_COUNT = (int)(sizeof AVO_APPS / sizeof AVO_APPS[0]);

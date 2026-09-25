@@ -165,8 +165,24 @@ bool avo_hal_settings_load(avo_settings_t *out);
 bool avo_hal_settings_save(const avo_settings_t *in);
 
 /* ---------------------------------------------------------------- feedback */
-/* Short UI click; there is no vibration motor on this board. */
+/* Short UI click (only when Sonidos is on); there is no vibration motor. */
 void avo_hal_click(void);
+/* Plays at the configured volume, replacing any sound in progress. Looping
+ * sounds (alarm, timer, ring) repeat until avo_hal_sound_stop(). */
+void avo_hal_sound_play(avo_sound_t id);
+void avo_hal_sound_stop(void);
+
+/* ---------------------------------------------------------------- activity */
+/* Today's totals from the step counter. */
+void avo_hal_activity(avo_activity_t *out);
+
+/* ---------------------------------------------------------------- alarms */
+bool avo_hal_alarms_load(avo_alarms_t *out);
+bool avo_hal_alarms_save(const avo_alarms_t *in);
+
+/* ---------------------------------------------------------------- weather */
+/* Last forecast fetched over Wi-Fi (Open-Meteo). False until one arrives. */
+bool avo_hal_weather(avo_weather_t *out);
 
 #ifdef __cplusplus
 }

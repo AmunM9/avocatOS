@@ -26,3 +26,18 @@
 #define AVO_SYM_CHECK      "\xEF\x80\x8C" /* U+F00C */
 #define AVO_SYM_RULER      "\xEF\x95\x86" /* U+F546 */
 #define AVO_SYM_HEART      "\xEF\x80\x84" /* U+F004 */
+/* phase 3 */
+#define AVO_SYM_CLOUD      "\xEF\x83\x82" /* U+F0C2 */
+#define AVO_SYM_CLOUD_SUN  "\xEF\x9B\x84" /* U+F6C4 */
+#define AVO_SYM_CLOUD_MOON "\xEF\x9B\x83" /* U+F6C3 */
+#define AVO_SYM_CLOUD_RAIN "\xEF\x9C\xBD" /* U+F73D */
+#define AVO_SYM_SHOWERS    "\xEF\x9D\x80" /* U+F740 */
+#define AVO_SYM_SNOW       "\xEF\x8B\x9C" /* U+F2DC */
+#define AVO_SYM_SMOG       "\xEF\x9D\x9F" /* U+F75F */
+#define AVO_SYM_RUN        "\xEF\x9C\x8C" /* U+F70C */
+#define AVO_SYM_CHILD      "\xEF\x86\xAE" /* U+F1AE */
+#define AVO_SYM_PIN        "\xEF\x8F\x85" /* U+F3C5 */
+#define AVO_SYM_TAP        "\xEF\x89\x9A" /* U+F25A */
+#define AVO_SYM_FLICK      "\xEF\x8B\xB1" /* U+F2F1 */
+#define AVO_SYM_REDO       "\xEF\x80\x9E" /* U+F01E */
+#define AVO_SYM_BED        "\xEF\x88\xB6" /* U+F236 */

@@ -1,4 +1,5 @@
 /* Control Center, Smart Stack and the Always-On screen. */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "avo_ui_internal.h"
@@ -226,6 +227,7 @@ void avo_cc_build(lv_obj_t *screen)
 static struct {
     lv_timer_t *timer;
     lv_obj_t *day_bar, *day_lbl, *sw_lbl, *batt_lbl, *music_lbl;
+    lv_obj_t *wx_lbl, *act_lbl, *alarm_lbl;
     uint32_t media_version;
 } st;
 
@@ -284,6 +286,35 @@ static void stack_refresh(void)
     battery_text(buf, sizeof buf, &b);
     lv_label_set_text(st.batt_lbl, buf);
 
+    avo_weather_t w;
+    if (avo_hal_weather(&w)) {
+        if (w.days > 0) {
+            snprintf(buf, sizeof buf, "%s %d°  Máx %d°", avo_wx_symbol(w.code, w.is_day), (int)lroundf(w.temp),
+                     (int)lroundf(w.day_max[0]));
+        } else {
+            snprintf(buf, sizeof buf, "%s %d°", avo_wx_symbol(w.code, w.is_day), (int)lroundf(w.temp));
+        }
+    } else {
+        snprintf(buf, sizeof buf, "%s", avo_settings()->weather ? "Sin datos" : "Desactivado");
+    }
+    lv_label_set_text(st.wx_lbl, buf);
+
+    avo_activity_t a;
+    avo_hal_activity(&a);
+    char n[16];
+    avo_fmt_thousands(n, sizeof n, a.steps);
+    snprintf(buf, sizeof buf, "%s pasos · %u min", n, a.exercise_min);
+    lv_label_set_text(st.act_lbl, buf);
+
+    bool snoozed;
+    char hm[12];
+    if (avo_alarms_next_text(hm, sizeof hm, &snoozed)) {
+        snprintf(buf, sizeof buf, "%s%s", snoozed ? "Pospuesta · " : "", hm);
+    } else {
+        snprintf(buf, sizeof buf, "Sin alarmas");
+    }
+    lv_label_set_text(st.alarm_lbl, buf);
+
     avo_media_t m;
     avo_hal_media(&m);
     if (m.version != st.media_version || !m.available) {
@@ -334,9 +365,11 @@ void avo_stack_build(lv_obj_t *screen)
     lv_obj_add_style(st.day_bar, &avo_sty()->track, 0);
     lv_obj_add_style(st.day_bar, &avo_sty()->accent_fill, LV_PART_INDICATOR);
 
-    stack_card(col, AVO_HUE_SOLAR, AVO_SYM_STOPWATCH, "Cronómetro", &st.sw_lbl, &AVO_APP_STOPWATCH);
-
     stack_card(col, AVO_HUE_ROSE, LV_SYMBOL_AUDIO, "Música", &st.music_lbl, &AVO_APP_MUSIC);
+    stack_card(col, AVO_HUE_SKY, AVO_SYM_CLOUD_SUN, "Tiempo", &st.wx_lbl, &AVO_APP_WEATHER);
+    stack_card(col, AVO_HUE_EMBER, AVO_SYM_RUN, "Actividad", &st.act_lbl, &AVO_APP_ACTIVITY);
+    stack_card(col, AVO_HUE_SOLAR, AVO_SYM_CLOCK, "Alarma", &st.alarm_lbl, &AVO_APP_ALARMS);
+    stack_card(col, AVO_HUE_SOLAR, AVO_SYM_STOPWATCH, "Cronómetro", &st.sw_lbl, &AVO_APP_STOPWATCH);
 
     stack_card(col, AVO_HUE_LIME, LV_SYMBOL_BATTERY_FULL, "Batería", &st.batt_lbl, &AVO_APP_SETTINGS);
 

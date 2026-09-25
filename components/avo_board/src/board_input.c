@@ -2,9 +2,9 @@
  * Physical inputs polled from one low-priority task:
  *  - BOOT (GPIO0): short / double / long press   -> Digital Crown role
  *  - PWR (AXP2101 key flags): short / long press -> side button role
- *  - wrist raise from the accelerometer (when the screen sleeps)
+ *  - motion at 100 Hz: steps, double tap, wrist flick, wrist raise
+ * The motion code writes NVS, so this task keeps its stack in internal RAM.
  */
-#include <math.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -13,16 +13,13 @@
 #include "avo_ui.h"
 #include "board_priv.h"
 
-#define POLL_MS 20
-#define PMU_EVERY 3          /* poll the PMU key every 60 ms          */
-#define IMU_EVERY 5          /* accelerometer at 10 Hz while asleep   */
+#define POLL_MS 10           /* = 1000 / AVO_MOTION_HZ                */
+#define BOOT_EVERY 2         /* BOOT button every 20 ms               */
+#define PMU_EVERY 6          /* PMU key every 60 ms                   */
 #define LONG_MS 700
 #define DOUBLE_GAP_MS 280
 #define DEBOUNCE_MS 30
-#define RAISE_FACE_UP_G 0.75f
-#define RAISE_TILTED_G 0.35f
-#define RAISE_HOLD_TICKS 2
-#define INPUT_TASK_STACK 3072
+#define INPUT_TASK_STACK 4096
 #define INPUT_TASK_PRIO 3
 
 typedef enum { B_IDLE, B_DOWN, B_WAIT_SECOND, B_LONG_SENT } boot_state_t;
@@ -90,47 +87,22 @@ static void pmu_key_step(void)
     }
 }
 
-/* Screen-up after being tilted away for a moment = wrist raised. */
-static void raise_step(void)
-{
-    static bool was_tilted;
-    static int hold;
-    const avo_settings_t *s = board_settings_cache();
-    if (!s || !s->raise_to_wake || avo_ui_is_awake()) {
-        was_tilted = false;
-        hold = 0;
-        return;
-    }
-    float ax, ay, az;
-    if (!board_imu_read(&ax, &ay, &az)) {
-        return;
-    }
-    if (az < RAISE_TILTED_G) {
-        was_tilted = true;
-        hold = 0;
-    } else if (was_tilted && az > RAISE_FACE_UP_G && fabsf(ax) < 0.5f && fabsf(ay) < 0.6f) {
-        if (++hold >= RAISE_HOLD_TICKS) {
-            avo_ui_post_wake();
-            was_tilted = false;
-            hold = 0;
-        }
-    }
-}
-
 static void input_task(void *arg)
 {
     (void)arg;
     uint32_t tick = 0;
+    TickType_t wake = xTaskGetTickCount();
+    board_motion_init();
     for (;;) {
-        boot_button_step();
+        if (tick % BOOT_EVERY == 0) {
+            boot_button_step();
+        }
         if (tick % PMU_EVERY == 0) {
             pmu_key_step();
         }
-        if (tick % IMU_EVERY == 0) {
-            raise_step();
-        }
+        board_motion_step();
         tick++;
-        vTaskDelay(pdMS_TO_TICKS(POLL_MS));
+        vTaskDelayUntil(&wake, pdMS_TO_TICKS(POLL_MS));
     }
 }
 

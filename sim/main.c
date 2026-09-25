@@ -2,8 +2,9 @@
  * avocatOS desktop simulator.
  *
  *   ./avocatos_sim             interactive SDL window (mouse = finger)
- *       b BOOT   d BOOT double   s BOOT long (Smart Stack)   p PWR   l PWR long
+ *       b BOOT   d BOOT double   p PWR   l PWR long
  *       i connect fake iPhone    n notification   k incoming call   c charger
+ *       t double tap on the case     f wrist flick
  *   ./avocatos_sim --shots D   headless: scripted finger walks every screen,
  *                              checks the gestures and writes D/NN_name.ppm
  * Frames come from a real partial-refresh framebuffer, like the watch.
@@ -17,6 +18,7 @@
 #include "lvgl.h"
 #include "avo_ui.h"
 #include "avo_ui_internal.h"
+#include "avo_settings_pages.h"
 #include "sim.h"
 
 #define W AVO_W
@@ -129,6 +131,51 @@ static void expect(const char *what, avo_route_t want)
     s_fail += !ok;
 }
 
+static void check(const char *what, bool ok)
+{
+    printf("%s  %s\n", ok ? "PASS" : "FAIL", what);
+    s_fail += !ok;
+}
+
+/* double tap / wrist flick / alarms, driven like the board does */
+static void motion_checks(void)
+{
+    avo_nav_face(); run_ms(500);
+    sim_phone_push(true); run_ms(400);
+    check("llamada: suena el timbre", sim_last_sound() == AVO_SOUND_RING);
+    avo_ui_post_flick(); run_ms(300);
+    check("giro de muñeca silencia la llamada sin colgar", avo_overlay_active() && sim_last_sound() < 0);
+    avo_ui_post_double_tap(); run_ms(300);
+    check("doble toque contesta la llamada", !avo_overlay_active());
+    sim_phone_push(false); run_ms(400);
+    avo_ui_post_flick(); run_ms(300);
+    check("giro de muñeca descarta el aviso", !avo_overlay_active());
+    avo_nav_app(&AVO_APP_SETTINGS); run_ms(600);
+    avo_ui_post_flick(); run_ms(700);
+    expect("giro de muñeca vuelve a la esfera", AVO_ROUTE_FACE);
+
+    /* an alarm one minute ahead rings, double tap snoozes it */
+    avo_time_t now;
+    avo_hal_time_now(&now);
+    avo_alarms_t *al = avo_alarms();
+    int saved = al->count;
+    al->list[al->count++] = (avo_alarm_t){ (uint8_t)now.hour, (uint8_t)((now.min + 1) % 60), 0, true };
+    bool rang = false;
+    for (int i = 0; i < 70 && !rang; i++) {
+        run_ms(1000);
+        rang = avo_overlay_active() && sim_last_sound() == AVO_SOUND_ALARM;
+    }
+    check("la alarma suena a su hora", rang);
+    avo_ui_post_double_tap(); run_ms(300);
+    char hm[12];
+    bool snoozed = false;
+    avo_alarms_next_text(hm, sizeof hm, &snoozed);
+    check("doble toque pospone la alarma", !avo_overlay_active() && snoozed && sim_last_sound() < 0);
+    check("una alarma de una vez se desactiva sola", !al->list[saved].enabled);
+    al->count = saved;
+    avo_alarms_commit();
+}
+
 /* ---------------------------------------------------------------- tour */
 static void gesture_checks(void)
 {
@@ -200,6 +247,18 @@ static void tour(const char *dir, const char *suffix)
     avo_overlay_dismiss(); run_ms(300);
     sim_set_charger(true);          run_ms(1500); write_frame(dir, "charging");
     sim_set_charger(false);         run_ms(3000);
+    avo_nav_app(&AVO_APP_ACTIVITY); SHOT("activity");
+    avo_nav_app(&AVO_APP_WEATHER);  SHOT("weather");
+    avo_nav_app(&AVO_APP_ALARMS);   SHOT("alarms");
+    tap(205, 150);                  SHOT("alarm_editor");
+    avo_nav_app(&AVO_APP_SETTINGS); run_ms(400);
+    avo_nav_push(avo_settings_sound_page, NULL); SHOT("settings_sound");
+    avo_nav_push(avo_settings_gestures_page, avo_settings_gestures_leave); SHOT("settings_gestures");
+    avo_nav_face(); run_ms(400);
+    avo_nav_face_select(1);         SHOT("face_modular_live");
+    avo_nav_face_select(0);
+    avo_alert_timer_done(5, NULL);  run_ms(500); write_frame(dir, "timer_done");
+    avo_overlay_dismiss(); run_ms(300);
 #undef SHOT
     (void)suffix;
 }
@@ -224,6 +283,7 @@ static int headless(const char *dir)
     sim_phone_connect();
     run_ms(300);
     gesture_checks();
+    motion_checks();
     tour(dir, "clean");
     avo_settings()->theme = AVO_THEME_AVOCADO;
     avo_settings_commit();
@@ -244,13 +304,14 @@ static void keyboard_cb(lv_event_t *e)
     switch (lv_indev_get_key(lv_indev_active())) {
     case 'b': avo_ui_post_button(AVO_BTN_BOOT, AVO_PRESS_SHORT); break;
     case 'd': avo_ui_post_button(AVO_BTN_BOOT, AVO_PRESS_DOUBLE); break;
-    case 's': avo_ui_post_button(AVO_BTN_BOOT, AVO_PRESS_LONG); break;
     case 'p': avo_ui_post_button(AVO_BTN_PWR, AVO_PRESS_SHORT); break;
     case 'l': avo_ui_post_button(AVO_BTN_PWR, AVO_PRESS_LONG); break;
     case 'i': sim_phone_connect(); break;
     case 'n': sim_phone_push(false); break;
     case 'k': sim_phone_push(true); break;
     case 'c': charger = !charger; sim_set_charger(charger); break;
+    case 't': avo_ui_post_double_tap(); break;
+    case 'f': avo_ui_post_flick(); break;
     default: break;
     }
 }

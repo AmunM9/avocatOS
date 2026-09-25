@@ -216,10 +216,21 @@ void board_rtc_store(time_t utc)
 #define QMI_ID 0x05
 #define QMI_CTRL1 0x02
 #define QMI_CTRL2 0x03
+#define QMI_CTRL3 0x04
 #define QMI_CTRL5 0x06
 #define QMI_CTRL7 0x08
-#define QMI_AX_L 0x35
-#define QMI_ACC_SCALE (4.0f / 32768.0f) /* +-4 g */
+#define QMI_AX_L 0x35                     /* ax ay az gx gy gz, 12 bytes    */
+#define QMI_ACC_SCALE (4.0f / 32768.0f)   /* +-4 g                          */
+#define QMI_GYR_SCALE (512.0f / 32768.0f) /* +-512 dps                      */
+#define QMI_ACC_CFG 0x16  /* +-4 g, 125 Hz                                  */
+#define QMI_GYR_CFG 0x56  /* +-512 dps, 125 Hz                              */
+/* low-pass at 13 % of ODR (~16 Hz) for both sensors: wide enough to keep the
+ * sharp spike of a knock on the case */
+#define QMI_LPF_CFG 0x77
+#define QMI_EN_ACC 0x01
+#define QMI_EN_GYR 0x02
+
+static bool s_gyro_on;
 
 esp_err_t board_imu_init(void)
 {
@@ -230,24 +241,34 @@ esp_err_t board_imu_init(void)
         return ESP_ERR_NOT_FOUND;
     }
     board_reg_write(s_imu, QMI_CTRL1, 0x40);   /* address auto-increment */
-    board_reg_write(s_imu, QMI_CTRL2, 0x16);   /* accel +-4 g, ODR ~ 250 Hz / low power */
-    board_reg_write(s_imu, QMI_CTRL5, 0x01);   /* accel low-pass filter */
-    board_reg_write(s_imu, QMI_CTRL7, 0x01);   /* accelerometer only */
+    board_reg_write(s_imu, QMI_CTRL2, QMI_ACC_CFG);
+    board_reg_write(s_imu, QMI_CTRL3, QMI_GYR_CFG);
+    board_reg_write(s_imu, QMI_CTRL5, QMI_LPF_CFG);
+    board_reg_write(s_imu, QMI_CTRL7, QMI_EN_ACC); /* gyro only while wrist flick is on */
     s_imu_ok = true;
     return ESP_OK;
 }
 
-bool board_imu_read(float *ax, float *ay, float *az)
+void board_imu_gyro(bool on)
+{
+    if (s_imu_ok && on != s_gyro_on) {
+        board_reg_write(s_imu, QMI_CTRL7, on ? (QMI_EN_ACC | QMI_EN_GYR) : QMI_EN_ACC);
+        s_gyro_on = on;
+    }
+}
+
+bool board_imu_read6(float a[3], float g[3])
 {
     if (!s_imu_ok) {
         return false;
     }
-    uint8_t b[6];
+    uint8_t b[12];
     if (board_reg_read(s_imu, QMI_AX_L, b, sizeof b) != ESP_OK) {
         return false;
     }
-    *ax = (int16_t)(b[1] << 8 | b[0]) * QMI_ACC_SCALE;
-    *ay = (int16_t)(b[3] << 8 | b[2]) * QMI_ACC_SCALE;
-    *az = (int16_t)(b[5] << 8 | b[4]) * QMI_ACC_SCALE;
+    for (int i = 0; i < 3; i++) {
+        a[i] = (int16_t)(b[2 * i + 1] << 8 | b[2 * i]) * QMI_ACC_SCALE;
+        g[i] = s_gyro_on ? (int16_t)(b[2 * i + 7] << 8 | b[2 * i + 6]) * QMI_GYR_SCALE : 0.0f;
+    }
     return true;
 }

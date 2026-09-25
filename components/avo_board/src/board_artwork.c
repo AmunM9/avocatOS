@@ -1,4 +1,6 @@
 /*
+ * Network worker (album art, and the forecast via board_weather.c).
+ *
  * Album art for Now Playing. AMS does not carry artwork, so when the track
  * changes and Wi-Fi is up, the track is looked up in Apple's public iTunes
  * Search API (artist + title), the cover JPEG is downloaded at the size the
@@ -23,7 +25,7 @@ static const char *TAG = "board_artwork";
 #define JSON_MAX (24 * 1024)
 #define JPEG_MAX (48 * 1024)
 #define HTTP_TIMEOUT_MS 6000
-#define TASK_STACK (6 * 1024)
+#define TASK_STACK (12 * 1024)    /* TLS handshakes are stack hungry; PSRAM, so cheap */
 
 static uint16_t *s_buf[2];       /* PSRAM, ART_PX * ART_PX each               */
 static volatile int s_front = -1; /* buffer the UI may read, -1 = none        */
@@ -31,7 +33,7 @@ static volatile uint32_t s_version;
 static uint16_t s_w, s_h;
 
 /* Download `url` into `dst` (at most cap-1 bytes, NUL terminated). */
-static int http_get(const char *url, char *dst, int cap)
+int board_http_get(const char *url, char *dst, int cap)
 {
     esp_http_client_config_t cfg = {
         .url = url,
@@ -71,8 +73,8 @@ static bool fetch_cover(const char *artist, const char *title)
     if (json && jpeg) {
         char search[480];
         snprintf(search, sizeof search, "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=%s", q);
-        if (http_get(search, json, JSON_MAX) > 0 && avo_itunes_artwork_url(json, ART_PX, url, sizeof url)) {
-            int n = http_get(url, (char *)jpeg, JPEG_MAX);
+        if (board_http_get(search, json, JSON_MAX) > 0 && avo_itunes_artwork_url(json, ART_PX, url, sizeof url)) {
+            int n = board_http_get(url, (char *)jpeg, JPEG_MAX);
             int back = s_front == 0 ? 1 : 0;
             esp_jpeg_image_cfg_t jc = {
                 .indata = jpeg,
@@ -105,6 +107,7 @@ static void artwork_task(void *arg)
     uint32_t seen_at = 0;
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(POLL_MS));
+        board_weather_step(); /* same task: never two TLS sessions at once */
         avo_media_t m;
         avo_hal_media(&m);
         char key[130];
@@ -135,8 +138,8 @@ void board_artwork_start(void)
     if (!s_buf[0] || !s_buf[1]) {
         return;
     }
-    /* stack in PSRAM: the task only does networking and decoding */
-    xTaskCreatePinnedToCoreWithCaps(artwork_task, "avo_art", TASK_STACK, NULL, 2, NULL, 0, MALLOC_CAP_SPIRAM);
+    /* stack in PSRAM: the task only does networking and decoding (no flash) */
+    xTaskCreatePinnedToCoreWithCaps(artwork_task, "avo_net", TASK_STACK, NULL, 2, NULL, 0, MALLOC_CAP_SPIRAM);
 }
 
 bool avo_hal_artwork(avo_artwork_t *out)

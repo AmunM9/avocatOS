@@ -96,3 +96,23 @@ size_t avo_fmt_stopwatch(char *out, size_t len, uint32_t elapsed_ms)
         : snprintf(out, len, "%02u:%02u,%02u", (unsigned)m, (unsigned)s, (unsigned)cs);
     return utf8_finish(out, len, w);
 }
+
+size_t avo_fmt_thousands(char *out, size_t len, uint32_t n)
+{
+    char digits[12];
+    int nd = snprintf(digits, sizeof digits, "%u", (unsigned)n);
+    size_t w = 0;
+    for (int i = 0; i < nd && w + 1 < len; i++) {
+        if (i > 0 && (nd - i) % 3 == 0) {
+            if (w + 2 >= len) {
+                break;
+            }
+            out[w++] = '.';
+        }
+        out[w++] = digits[i];
+    }
+    if (len) {
+        out[w] = '\0';
+    }
+    return w;
+}

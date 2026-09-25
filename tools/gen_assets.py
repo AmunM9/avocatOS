@@ -5,7 +5,8 @@
 
 Outputs (committed, so builds never need Python/Node):
   components/avo_ui/assets/fonts/avo_font_*.c   Inter + LVGL symbols (lv_font_conv)
-  components/avo_ui/assets/img/avo_img_*.c      avocado marks (RGB565A8), Flux digit masks (A8)
+  components/avo_ui/assets/img/avo_img_*.c      avocado marks (RGB565A8), Flux digit masks and
+                                                the mirrored phone handset (A8)
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 FONT_SRC = ROOT / "assets" / "fonts"
@@ -24,7 +25,7 @@ OUT_IMG = ROOT / "components" / "avo_ui" / "assets" / "img"
 LV_FONT_CONV = ["npx", "-y", "lv_font_conv@1.5.2"]
 # Latin-1 + typographic punctuation (– — ‘ ’ “ ” • … ‹ ›), €, ™, arrows
 TEXT_RANGE = "0x20-0x7E,0xA0-0xFF,0x2010-0x2027,0x2030-0x203A,0x20AC,0x2122,0x2190-0x2193"
-DIGIT_RANGE = "0x20,0x2C,0x2E,0x30-0x3A"
+DIGIT_RANGE = "0x20,0x2C,0x2E,0x30-0x3A,0xB0"  # digits, : and the degree sign
 # LVGL built-in symbol code points (LV_SYMBOL_*)
 SYMBOLS = (
     "61441,61448,61451,61452,61453,61457,61459,61461,61465,61468,61473,61478,61479,"
@@ -32,7 +33,9 @@ SYMBOLS = (
     "61550,61552,61553,61556,61559,61560,61561,61563,61587,61589,61636,61637,61639,"
     "61641,61664,61671,61674,61683,61724,61732,61787,61931,62016,62017,62018,62019,"
     "62020,62087,62099,62189,62212,62810,63426,63650,"
-    "61463,62194,62034,61675,61830,61829,61774,63166,62804,61948,61530,62171,61612,61548,61926,61475,62413,62153,63024,61942,61458,61524,61452,62790,61444"
+    "61463,62194,62034,61675,61830,61829,61774,63166,62804,61948,61530,62171,61612,61548,61926,61475,62413,62153,63024,61942,61458,61524,61452,62790,61444,"
+    # phase 3: weather, activity, alarms, gestures
+    "61634,63172,63171,63293,63296,62172,63327,63244,61870,62405,62042,62193,61470,62006"
 )
 
 # Single-colour emoji (Noto Emoji, OFL) used as fallback of the text fonts.
@@ -148,6 +151,17 @@ def draw_avocado(size_h: int, ears: bool) -> Image.Image:
     return img.resize((w // SS, h // SS), Image.LANCZOS)
 
 
+def mirrored_glyph(code: int, px_h: int, font_path: Path) -> Image.Image:
+    """A FontAwesome glyph flipped left-right (the handset of U+F095 faces the
+    other way than iOS; FA5 Free has no mirrored variant)."""
+    font = ImageFont.truetype(str(font_path), px_h * SS * 2)
+    canvas = Image.new("L", (px_h * SS * 3, px_h * SS * 3), 0)
+    ImageDraw.Draw(canvas).text((px_h * SS // 2, px_h * SS // 2), chr(code), font=font, fill=255)
+    glyph = ImageOps.mirror(canvas.crop(canvas.getbbox()))
+    w = max(1, round(glyph.width * px_h / glyph.height))
+    return glyph.resize((w, px_h), Image.LANCZOS)
+
+
 def digit_mask(ch: str, px_h: int, font_path: Path) -> Image.Image:
     font = ImageFont.truetype(str(font_path), int(px_h * 1.38 * SS))
     canvas = Image.new("L", (int(px_h * 1.2 * SS), int(px_h * 1.6 * SS)), 0)
@@ -215,6 +229,9 @@ def main() -> int:
     nunito = FONT_SRC / "nunito-900.ttf"
     for digit in "0123456789":
         write_image(f"avo_img_flux_{digit}", digit_mask(digit, 196, nunito), "A8")
+    fa = FONT_SRC / "FontAwesome5-Solid+Brands+Regular.woff"
+    for px in (27, 36):  # glyph height of the 30 px and 40 px icon fonts
+        write_image(f"avo_img_phone_{px}", mirrored_glyph(0xF095, px, fa), "A8")
     return 0
 
 

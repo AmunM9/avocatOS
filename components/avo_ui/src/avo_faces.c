@@ -3,6 +3,7 @@
  * objects whose content changed (minute digits, second hand...), so the
  * display only re-sends small dirty areas at 1 Hz.
  */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "avo_ui_internal.h"
@@ -46,7 +47,7 @@ static struct {
 
 static struct {
     lv_obj_t *time, *date, *long_date, *net;
-    lv_obj_t *batt_arc, *batt_lbl, *sec_arc, *sec_lbl, *bt_lbl;
+    lv_obj_t *batt_arc, *batt_lbl, *act_arc, *act_lbl, *wx_lbl;
     int last_min;
 } s_mod;
 
@@ -219,13 +220,32 @@ static void modular_refresh_status(bool force)
     lv_label_set_text(s_mod.batt_lbl, buf);
     lv_obj_set_style_arc_color(s_mod.batt_arc, battery_color(&b), LV_PART_INDICATOR);
 
-    avo_link_t bt = avo_hal_bt_state();
-    lv_obj_set_style_text_color(s_mod.bt_lbl, bt == AVO_LINK_CONNECTED ? avo_hue(AVO_HUE_SKY)
-                                : bt == AVO_LINK_OFF ? avo_pal()->label2 : avo_pal()->label, 0);
+    avo_activity_t a;
+    avo_hal_activity(&a);
+    uint32_t goal = avo_settings()->step_goal;
+    lv_arc_set_value(s_mod.act_arc, goal ? (int32_t)LV_MIN(100u, a.steps * 100u / goal) : 0);
+    if (a.steps >= 10000) {
+        snprintf(buf, sizeof buf, "%uk", (unsigned)(a.steps / 1000));
+    } else {
+        avo_fmt_thousands(buf, sizeof buf, a.steps);
+    }
+    lv_label_set_text(s_mod.act_lbl, buf);
 
-    char ssid[AVO_WIFI_SSID_MAX], ip[16];
+    avo_weather_t w;
+    if (avo_hal_weather(&w)) {
+        snprintf(buf, sizeof buf, "%d°", (int)lroundf(w.temp));
+    } else {
+        snprintf(buf, sizeof buf, "%s", AVO_SYM_CLOUD);
+    }
+    lv_label_set_text(s_mod.wx_lbl, buf);
+
+    /* second line: next alarm, else the network, else the name */
+    char hm[12], ssid[AVO_WIFI_SSID_MAX], ip[16];
+    bool snoozed;
     avo_hal_wifi_info(ssid, sizeof ssid, ip, sizeof ip);
-    if (ssid[0]) {
+    if (avo_alarms_next_text(hm, sizeof hm, &snoozed)) {
+        snprintf(buf, sizeof buf, AVO_SYM_CLOCK "  %s%s", snoozed ? "Pospuesta · " : "Alarma ", hm);
+    } else if (ssid[0]) {
         snprintf(buf, sizeof buf, LV_SYMBOL_WIFI "  %s", ssid);
     } else {
         snprintf(buf, sizeof buf, "%s", avo_theme_is_avocado() ? AVO_SYM_LEAF "  avocatOS" : "avocatOS");
@@ -260,13 +280,11 @@ static lv_obj_t *modular_create(lv_obj_t *parent, const avo_time_t *t)
 
     int32_t gap = (AVO_W - 2 * AVO_PAD - 3 * ARC_SIZE) / 2;
     s_mod.batt_arc = complication_arc(root, AVO_PAD, p->good, &s_mod.batt_lbl, "Batería");
-    s_mod.sec_arc = complication_arc(root, AVO_PAD + ARC_SIZE + gap, p->accent, &s_mod.sec_lbl, "Segundos");
-    lv_arc_set_range(s_mod.sec_arc, 0, 59);
-    lv_obj_t *bt_arc = complication_arc(root, AVO_PAD + 2 * (ARC_SIZE + gap), avo_hue(AVO_HUE_SKY), &s_mod.bt_lbl, "Bluetooth");
-    lv_arc_set_value(bt_arc, 100);
-    lv_obj_set_style_arc_opa(bt_arc, LV_OPA_TRANSP, LV_PART_INDICATOR);
-    lv_obj_set_style_text_font(s_mod.bt_lbl, &avo_font_30, 0);
-    lv_label_set_text(s_mod.bt_lbl, LV_SYMBOL_BLUETOOTH);
+    s_mod.act_arc = complication_arc(root, AVO_PAD + ARC_SIZE + gap, avo_hue(AVO_HUE_EMBER), &s_mod.act_lbl, "Pasos");
+    lv_obj_set_style_text_font(s_mod.act_lbl, &avo_font_26, 0);
+    lv_obj_t *wx_arc = complication_arc(root, AVO_PAD + 2 * (ARC_SIZE + gap), avo_hue(AVO_HUE_SKY), &s_mod.wx_lbl, "Tiempo");
+    lv_arc_set_value(wx_arc, 100);
+    lv_obj_set_style_arc_opa(wx_arc, LV_OPA_TRANSP, LV_PART_INDICATOR);
 
     lv_obj_t *card = avo_glass(root);
     lv_obj_set_size(card, AVO_W - 2 * AVO_PAD, 118);
@@ -288,10 +306,6 @@ static void modular_tick(const avo_time_t *t)
     if (!s_mod.time) {
         return;
     }
-    lv_arc_set_value(s_mod.sec_arc, t->sec);
-    char buf[4];
-    snprintf(buf, sizeof buf, "%02d", t->sec);
-    lv_label_set_text(s_mod.sec_lbl, buf);
     if (t->min != s_mod.last_min) {
         s_mod.last_min = t->min;
         modular_set_time(t);

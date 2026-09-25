@@ -56,9 +56,28 @@ void board_pmu_poll_key(bool *short_press, bool *long_press);
 esp_err_t board_rtc_init(void);
 void board_rtc_store(time_t utc);
 
-/* QMI8658 accelerometer (gyro stays off to save power). */
+/* QMI8658 accelerometer (g) and gyroscope (dps; zeros while it is off). */
 esp_err_t board_imu_init(void);
-bool board_imu_read(float *ax, float *ay, float *az);
+bool board_imu_read6(float a[3], float g[3]);
+void board_imu_gyro(bool on);
+
+/* 100 Hz motion processing (steps, double tap, wrist flick, wrist raise),
+ * called from the input task, which has an internal-RAM stack and may
+ * therefore write NVS. */
+void board_motion_init(void);
+void board_motion_step(void);
+
+/* Speaker (ES8311). Optional: sounds are silently skipped without it. */
+esp_err_t board_audio_init(void);
+
+/* Forecast over Wi-Fi, run from the network worker task. */
+void board_weather_step(void);
+/* HTTPS GET into `dst` (NUL terminated). Returns bytes read, -1 on error. */
+int board_http_get(const char *url, char *dst, int cap);
+
+/* Small blobs in the avocatOS NVS namespace. `len` in: capacity, out: size. */
+bool board_nvs_load(const char *key, void *buf, size_t *len);
+bool board_nvs_save(const char *key, const void *buf, size_t len);
 
 esp_err_t board_display_init(void);
 void board_display_brightness(uint8_t percent);
