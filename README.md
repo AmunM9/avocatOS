@@ -79,6 +79,11 @@ Capturas del simulador de escritorio, que usa exactamente la misma interfaz que 
 
 ## Hardware
 
+<p align="center">
+  <img src="docs/images/waveshare-esp32-s3-amoled-2.06.jpg" alt="Waveshare ESP32-S3-Touch-AMOLED-2.06 con su correa, mostrando el firmware de fábrica" width="320">
+  <br><sub>La placa con su caja y correa, con el firmware de fábrica. Imagen: Waveshare.</sub>
+</p>
+
 Waveshare **ESP32-S3-Touch-AMOLED-2.06**:
 - ESP32-S3R8 con 8 MB de PSRAM y 32 MB de flash.
 - AMOLED 410×502 con controlador CO5300 por QSPI, y táctil FT3168.
